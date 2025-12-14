@@ -80,25 +80,58 @@ AUTO_WEIGHTS = {
 def load_all_models():
     models = {}
     loaded_count = 0
+    expected_models = list(MODEL_FILES.keys())
+
+    diagnostics = {}  # simpan status tiap model untuk ditampilkan di sidebar
 
     for name, filename in MODEL_FILES.items():
         full_path = os.path.join(BASE_DIR, filename)
-        if not os.path.exists(full_path):
+
+        # 1) opsional download kalau file belum ada
+        dl_info = None
+        if (not os.path.exists(full_path)) and (name in MODEL_URLS):
+            dl_info = download_if_missing(MODEL_URLS[name], full_path)
+
+        # 2) inspeksi file (ada/tidak, ukuran, LFS pointer)
+        finfo = inspect_model_file(full_path)
+        diagnostics[name] = {
+            "file": filename,
+            "full_path": full_path,
+            "download": dl_info,
+            "inspect": finfo,
+            "load_ok": False,
+            "error": None,
+            "traceback": None,
+        }
+
+        if not finfo["exists"]:
+            diagnostics[name]["error"] = "File tidak ditemukan di server."
             continue
 
+        if finfo["is_lfs_pointer"]:
+            diagnostics[name]["error"] = "File ini terdeteksi Git LFS pointer (bukan model asli)."
+            continue
+
+        # 3) coba load model + tampilkan error aslinya bila gagal
         try:
             models[name] = load_model(full_path, compile=False)
             loaded_count += 1
-        except Exception:
-            # Recovery kecil
+            diagnostics[name]["load_ok"] = True
+        except Exception as e1:
             try:
-                models[name] = load_model(full_path, compile=False, custom_objects={"relu6": tf.nn.relu6})
+                models[name] = load_model(
+                    full_path,
+                    compile=False,
+                    custom_objects={"relu6": tf.nn.relu6}
+                )
                 loaded_count += 1
-            except Exception:
-                pass
+                diagnostics[name]["load_ok"] = True
+            except Exception as e2:
+                diagnostics[name]["error"] = f"load_model gagal: {e2}"
+                diagnostics[name]["traceback"] = traceback.format_exc()
 
-    expected_models = list(MODEL_FILES.keys())
-    return models, loaded_count, expected_models
+    return models, loaded_count, expected_models, diagnostics
+
 
 
 # =========================
@@ -171,14 +204,38 @@ with st.sidebar:
     groq_api_key = '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'
     
     # --- Status Model ---
+    st.markdown("### 🧠 Status Model")
+    st.caption(f"TensorFlow: {tf.__version__}")
+
     missing_models = [m for m in expected_models if m not in models_dict]
 
     if missing_models:
         st.error("⚠️ Beberapa model gagal dimuat!")
-        for m in missing_models:
-            st.write(f"❌ {m} (cek file: {MODEL_FILES[m]})")
     else:
         st.success(f"✅ Semua {model_ok_count} model berhasil dimuat.")
+
+    for m in expected_models:
+        d = model_diag.get(m, {})
+        finfo = (d.get("inspect") or {})
+        ok = d.get("load_ok", False)
+
+        if ok:
+            st.write(f"✅ **{m}** — loaded")
+        else:
+            st.write(f"❌ **{m}** — gagal")
+            with st.expander(f"Detail error: {m}", expanded=False):
+                st.write("**File:**", d.get("file"))
+                st.write("**Path:**", d.get("full_path"))
+                st.write("**Exists:**", finfo.get("exists"))
+                st.write("**Size (MB):**", finfo.get("size_mb"))
+                st.write("**Is LFS Pointer:**", finfo.get("is_lfs_pointer"))
+                if finfo.get("head_preview"):
+                    st.code(finfo.get("head_preview"))
+                if d.get("download") is not None:
+                    st.write("**Download:**", d.get("download"))
+                st.write("**Error:**", d.get("error"))
+                if d.get("traceback"):
+                    st.code(d.get("traceback"))
 
     st.markdown("---")
     st.markdown("### ⚖️ Bobot Ensemble")

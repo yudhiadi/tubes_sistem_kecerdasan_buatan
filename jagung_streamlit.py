@@ -68,7 +68,6 @@ PREPROCESS_MAP = {
 
 # =========================
 # 4) BOBOT AUTO (dari grafik F1 per kelas yang kamu kirim)
-#    - Hitung dari rata-rata F1 (macro over classes)
 # =========================
 AUTO_WEIGHTS = {
     "MobileNetV3": 0.333,
@@ -95,7 +94,6 @@ def load_all_models():
 
         if not os.path.exists(full_path):
             # jangan crash: cukup catat missing
-            print(f"❌ File tidak ditemukan: {full_path}")
             continue
 
         try:
@@ -104,7 +102,6 @@ def load_all_models():
             loaded_count += 1
         except Exception as e:
             # Recovery kecil untuk beberapa kasus custom op
-            print(f"⚠️ Gagal load {name} normal: {e}")
             try:
                 models[name] = load_model(
                     full_path,
@@ -112,9 +109,9 @@ def load_all_models():
                     custom_objects={"relu6": tf.nn.relu6}
                 )
                 loaded_count += 1
-                print(f"✅ Recovery berhasil untuk {name}")
             except Exception as e2:
-                print(f"❌ Recovery gagal {name}: {e2}")
+                # Gagal load meskipun sudah dicoba recovery
+                pass 
 
     expected_models = list(MODEL_FILES.keys())
     return models, loaded_count, expected_models
@@ -126,17 +123,9 @@ def run_research_ensemble(models_dict, weights_dict, image_pil):
     """
     Weighted average:
       final_probs = sum_i (w_i * p_i) / sum_i (w_i)
-    - p_i: probabilitas softmax model i (shape [4])
-    - w_i: bobot model i
     """
-
-    # Samakan size input: 224x224 (umum untuk ImageNet backbones)
     size = (224, 224)
-
-    # Fit+crop biar rasio tetap bagus (daripada stretch)
     image_resized = ImageOps.fit(image_pil, size, Image.Resampling.LANCZOS).convert("RGB")
-
-    # Ubah ke array float32 (TF friendly)
     img_array_base = np.asarray(image_resized).astype(np.float32)
 
     model_names = []
@@ -145,17 +134,12 @@ def run_research_ensemble(models_dict, weights_dict, image_pil):
     effective_total_weight = 0.0
 
     for name, model in models_dict.items():
-        # Copy array mentah, lalu preprocess sesuai backbone model tsb
         img_input = img_array_base.copy()
         img_input = PREPROCESS_MAP[name](img_input)
-
-        # Tambah dimensi batch: (1, 224, 224, 3)
         img_input = np.expand_dims(img_input, axis=0)
 
-        # Prediksi => (1,4) lalu ambil [0]
         pred_prob = model.predict(img_input, verbose=0)[0]
 
-        # Bobot model (kalau 0, kontribusinya 0)
         w = float(weights_dict.get(name, 0.0))
 
         model_names.append(name)
@@ -164,7 +148,6 @@ def run_research_ensemble(models_dict, weights_dict, image_pil):
         weighted_sum += pred_prob * w
         effective_total_weight += w
 
-    # Kalau user set semua bobot 0, jangan bagi 0
     if effective_total_weight <= 0:
         effective_total_weight = 1.0
 
@@ -187,40 +170,34 @@ def run_research_ensemble(models_dict, weights_dict, image_pil):
 def load_knowledge_base():
     """
     Load semua PDF di folder knowledge_base/ lalu buat vectorstore Chroma.
-    cache_resource => tidak rebuild embedding setiap rerun.
     """
     SOP_FOLDER = "knowledge_base"
     os.makedirs(SOP_FOLDER, exist_ok=True)
 
     pdf_files = glob.glob(os.path.join(SOP_FOLDER, "*.pdf"))
     if not pdf_files:
-        # return None, 0, []  <-- Tambahkan list kosong untuk nama file
         return None, 0, [] 
 
     all_documents = []
-    pdf_filenames = [] # <--- Variabel baru untuk menampung nama file
+    pdf_filenames = [] 
 
     for pdf_path in pdf_files:
         try:
             loader = PyPDFLoader(pdf_path)
             docs = loader.load()
             all_documents.extend(docs)
-            
-            # Ambil nama file saja (tanpa path folder)
-            pdf_filenames.append(os.path.basename(pdf_path)) # <--- Simpan nama file
+            pdf_filenames.append(os.path.basename(pdf_path)) 
         except Exception as e:
             print(f"[WARN] gagal load PDF {pdf_path}: {e}")
 
     if not all_documents:
-        return None, len(pdf_files), pdf_filenames # <--- Kembalikan nama file
+        return None, len(pdf_files), pdf_filenames
 
-    # chunk_size=1000 cukup “padat”, chunk_overlap=200 biar konteks nyambung
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     splits = splitter.split_documents(all_documents)
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-    # persist_directory biar lebih stabil (opsional, tapi enak untuk app)
     vectorstore = Chroma.from_documents(
         splits,
         embedding=embeddings,
@@ -228,7 +205,7 @@ def load_knowledge_base():
         collection_name="kb_jagung"
     )
 
-    return vectorstore, len(pdf_files), pdf_filenames # <--- Kembalikan nama file
+    return vectorstore, len(pdf_files), pdf_filenames
 
 vectorstore_db, jumlah_pdf, daftar_pdf = load_knowledge_base()
 
@@ -241,18 +218,13 @@ with st.sidebar:
     st.markdown("---")
     st.caption(f"📚 Knowledge base PDF terdeteksi: {jumlah_pdf}")
 
-    # KODE BARU UNTUK MENAMPILKAN DAFTAR PDF
     if jumlah_pdf > 0:
-        # Gunakan st.expander agar sidebar tidak terlalu panjang
         with st.expander("Lihat Daftar Referensi PDF"):
             st.markdown("*File yang dimuat:*")
-            # Konversi list nama file menjadi list Markdown
             for file_name in daftar_pdf:
                 st.markdown(f"- **{file_name}**")
 
-    # Jangan hardcode API key di source code (lebih aman pakai st.secrets / env)
     groq_api_key = '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'
-
 
     models_dict, count, expected_models = load_all_models()
 
@@ -285,7 +257,7 @@ with st.sidebar:
 
         weights_dict = {"MobileNetV3": w_mob, "EfficientNet": w_eff, "DenseNet": w_dense}
 
-        # Optional: normalisasi supaya sum=1 (lebih “rapi”)
+        # Optional: normalisasi supaya sum=1
         if st.checkbox("Normalisasi bobot (sum=1)", value=True):
             s = sum(weights_dict.values())
             if s > 0:
@@ -299,24 +271,17 @@ with st.sidebar:
 # =========================
 tab1, tab2 = st.tabs(["📊 Analisis Citra & Data", "💬 Diskusi Pakar"])
 
-# ---------- TAB 1 ----------
+# ---------- TAB 1 (Hanya Upload File) ----------
 with tab1:
     st.header("Analisis Citra (Deep Learning Ensemble)")
 
-    # Upload & Kamera
-    colA, colB = st.columns(2)
-
-    with colA:
-        uploaded_file = st.file_uploader("📁 Upload Sampel Daun", type=["jpg", "png", "jpeg"])
-
-    with colB:
-        cam_file = st.camera_input("📷 Ambil Foto dari Kamera")
-
+    # --- HANYA FILE UPLOADER (Kamera dihapus) ---
+    uploaded_file = st.file_uploader("📁 Unggah Foto Daun Jagung (JPG/PNG)", type=["jpg", "png", "jpeg"])
+    
     image = None
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-    elif cam_file is not None:
-        image = Image.open(io.BytesIO(cam_file.getvalue()))
+    # ---------------------------------------------
 
     if image is not None:
         col_img, col_act = st.columns([1, 2])
@@ -330,7 +295,6 @@ with tab1:
                 if len(models_dict) == 0:
                     st.error("❌ Tidak ada model yang bisa digunakan. Pastikan file `.keras` tersedia.")
                 else:
-                    # LOADING INDICATOR
                     with st.spinner("⏳ Sedang menjalankan inferensi..."):
                         result = run_research_ensemble(models_dict, weights_dict, image)
                         st.session_state["diagnosis_result"] = result
@@ -342,7 +306,6 @@ with tab1:
         st.subheader("✅ Hasil Diagnosis Ensemble")
         st.metric("Prediksi Akhir", result["final_label"], f"{result['final_conf']*100:.2f}%")
 
-        # Probabilitas harus URUT sesuai CLASS_NAMES (jangan di-sort)
         probs_df = pd.DataFrame({
             "Kelas": CLASS_NAMES,
             "Probabilitas": result["final_probs"]
@@ -399,12 +362,10 @@ with tab2:
             answer = "Knowledge base belum tersedia."
         else:
             retriever = vectorstore_db.as_retriever(search_kwargs={"k": 4})
-
-            # FIX: versi LangChain baru umumnya pakai invoke()
+            
             try:
                 docs = retriever.invoke(user_q)
             except Exception:
-                # fallback (kalau ada versi lama)
                 docs = retriever.get_relevant_documents(user_q)
 
             context = "\n\n".join([d.page_content for d in docs]) if docs else ""
@@ -412,10 +373,9 @@ with tab2:
             if not groq_api_key:
                 answer = "Groq API Key belum di-set."
             else:
-                # Ganti model Groq yang masih aktif
                 llm = ChatGroq(
                     api_key=groq_api_key,
-                    model="llama-3.3-70b-versatile",  # alternatif ringan: "llama-3.1-8b-instant"
+                    model="llama-3.3-70b-versatile",
                     temperature=0.2
                 )
 

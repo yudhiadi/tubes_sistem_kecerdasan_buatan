@@ -12,3 +12,4 @@ langchain-groq
 pypdf
 sentence-transformers
 chromadb
+torch

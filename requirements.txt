@@ -14,3 +14,4 @@ langchain-chroma
 langchain-groq
 # Keras (Jika diperlukan oleh TensorFlow versi lama)
 keras
+pypdf

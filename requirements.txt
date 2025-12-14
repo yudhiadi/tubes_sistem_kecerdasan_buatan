@@ -1,15 +1,16 @@
-# CORE STREAMLIT & UI
 streamlit
+tensorflow
 numpy
 pandas
+matplotlib
 Pillow
 altair
-
-# TENSORFLOW & KERAS (Kritis untuk load_model)
-tensorflow==2.15.0  # Wajib untuk Keras 2.x yang stabil
-scikit-learn        # Untuk class_weight (saat training)
-
-# AI & LLM (Untuk Chatbot Konsultasi Umum)
+# LangChain & RAG
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-huggingface
+langchain-chroma
 langchain-groq
-langchain-core==0.1.18
-pydantic==1.10.13   # Memperbaiki dependency issues tersembunyi di LangChain lama
+# Keras (Jika diperlukan oleh TensorFlow versi lama)
+keras

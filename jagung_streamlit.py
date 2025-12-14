@@ -311,7 +311,7 @@ with st.sidebar:
 
     st.markdown("---")
     # Bagian input key (diubah sedikit agar lebih bersih)
-    groq_api_key = st.secrets.get("GROQ_API_KEY", "") 
+    groq_api_key = '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'
     if not groq_api_key:
         st.error("GROQ_API_KEY belum terkonfigurasi. Chat Ahli mungkin tidak berfungsi.")
         groq_api_key = st.text_input("Masukkan Groq API Key (opsional)", type="password")

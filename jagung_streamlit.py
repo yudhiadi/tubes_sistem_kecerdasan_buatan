@@ -211,6 +211,7 @@ def load_knowledge_base():
 
     return vectorstore, len(pdf_files), pdf_filenames
 
+vectorstore_db, jumlah_pdf, daftar_pdf = load_knowledge_base()
 
 # =========================
 # 8) SIDEBAR UI

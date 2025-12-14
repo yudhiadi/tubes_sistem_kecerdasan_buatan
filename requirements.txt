@@ -12,4 +12,5 @@ pypdf
 sentence-transformers
 chromadb
 torch
+pysqlite3-binary
 tf-keras

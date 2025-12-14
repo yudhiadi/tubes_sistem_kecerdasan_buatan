@@ -12,3 +12,4 @@ pypdf
 sentence-transformers
 chromadb
 torch
+tf-keras

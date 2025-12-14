@@ -20,6 +20,38 @@ from tensorflow.keras.applications.densenet import preprocess_input as densenet_
 # LANGCHAIN (HANYA GROQ)
 # =========================
 from langchain_groq import ChatGroq
+
+import traceback
+
+def _is_lfs_pointer(head_bytes: bytes) -> bool:
+    try:
+        head_text = head_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return False
+    return "git-lfs.github.com/spec/v1" in head_text
+
+def inspect_model_file(path: str) -> dict:
+    info = {
+        "path": path,
+        "exists": os.path.exists(path),
+        "size_mb": None,
+        "is_lfs_pointer": False,
+        "head_preview": None,
+    }
+    if not info["exists"]:
+        return info
+
+    try:
+        size = os.path.getsize(path)
+        info["size_mb"] = round(size / (1024 * 1024), 3)
+        with open(path, "rb") as f:
+            head = f.read(200)
+        info["is_lfs_pointer"] = _is_lfs_pointer(head)
+        info["head_preview"] = head.decode("utf-8", errors="ignore")[:200]
+    except Exception as e:
+        info["head_preview"] = f"[inspect error] {e}"
+    return info
+
 # Ketergantungan RAG lain dihapus untuk menghindari konflik
 
 # =========================
@@ -81,23 +113,15 @@ def load_all_models():
     models = {}
     loaded_count = 0
     expected_models = list(MODEL_FILES.keys())
-
-    diagnostics = {}  # simpan status tiap model untuk ditampilkan di sidebar
+    diagnostics = {}
 
     for name, filename in MODEL_FILES.items():
         full_path = os.path.join(BASE_DIR, filename)
 
-        # 1) opsional download kalau file belum ada
-        dl_info = None
-        if (not os.path.exists(full_path)) and (name in MODEL_URLS):
-            dl_info = download_if_missing(MODEL_URLS[name], full_path)
-
-        # 2) inspeksi file (ada/tidak, ukuran, LFS pointer)
         finfo = inspect_model_file(full_path)
         diagnostics[name] = {
             "file": filename,
             "full_path": full_path,
-            "download": dl_info,
             "inspect": finfo,
             "load_ok": False,
             "error": None,
@@ -109,28 +133,25 @@ def load_all_models():
             continue
 
         if finfo["is_lfs_pointer"]:
-            diagnostics[name]["error"] = "File ini terdeteksi Git LFS pointer (bukan model asli)."
+            diagnostics[name]["error"] = "File terdeteksi Git LFS pointer (bukan file model asli)."
             continue
 
-        # 3) coba load model + tampilkan error aslinya bila gagal
         try:
             models[name] = load_model(full_path, compile=False)
             loaded_count += 1
             diagnostics[name]["load_ok"] = True
         except Exception as e1:
+            # coba recovery relu6
             try:
-                models[name] = load_model(
-                    full_path,
-                    compile=False,
-                    custom_objects={"relu6": tf.nn.relu6}
-                )
+                models[name] = load_model(full_path, compile=False, custom_objects={"relu6": tf.nn.relu6})
                 loaded_count += 1
                 diagnostics[name]["load_ok"] = True
             except Exception as e2:
-                diagnostics[name]["error"] = f"load_model gagal: {e2}"
+                diagnostics[name]["error"] = str(e2)
                 diagnostics[name]["traceback"] = traceback.format_exc()
 
     return models, loaded_count, expected_models, diagnostics
+
 
 
 
@@ -188,7 +209,7 @@ def load_knowledge_base():
 # =========================
 # PANGGIL MODEL & KB
 # =========================
-models_dict, model_ok_count, expected_models = load_all_models()
+models_dict, model_ok_count, expected_models, model_diag = load_all_models()
 vectorstore_db, detected_count, daftar_pdf = load_knowledge_base() 
 # ^^^ PENTING: Panggil dummy KB, tangkap 3 nilai agar tidak NameError
 
@@ -215,27 +236,17 @@ with st.sidebar:
         st.success(f"✅ Semua {model_ok_count} model berhasil dimuat.")
 
     for m in expected_models:
-        d = model_diag.get(m, {})
-        finfo = (d.get("inspect") or {})
-        ok = d.get("load_ok", False)
+    if m in models_dict:
+        st.write(f"✅ {m} loaded")
+    else:
+        st.write(f"❌ {m} gagal")
+        with st.expander(f"Detail {m}"):
+            st.write(model_diag[m]["full_path"])
+            st.write(model_diag[m]["inspect"])
+            st.write("Error:", model_diag[m]["error"])
+            if model_diag[m]["traceback"]:
+                st.code(model_diag[m]["traceback"])
 
-        if ok:
-            st.write(f"✅ **{m}** — loaded")
-        else:
-            st.write(f"❌ **{m}** — gagal")
-            with st.expander(f"Detail error: {m}", expanded=False):
-                st.write("**File:**", d.get("file"))
-                st.write("**Path:**", d.get("full_path"))
-                st.write("**Exists:**", finfo.get("exists"))
-                st.write("**Size (MB):**", finfo.get("size_mb"))
-                st.write("**Is LFS Pointer:**", finfo.get("is_lfs_pointer"))
-                if finfo.get("head_preview"):
-                    st.code(finfo.get("head_preview"))
-                if d.get("download") is not None:
-                    st.write("**Download:**", d.get("download"))
-                st.write("**Error:**", d.get("error"))
-                if d.get("traceback"):
-                    st.code(d.get("traceback"))
 
     st.markdown("---")
     st.markdown("### ⚖️ Bobot Ensemble")

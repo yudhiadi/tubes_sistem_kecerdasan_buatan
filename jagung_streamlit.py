@@ -1,159 +1,162 @@
 import streamlit as st
 import os
+import io
 import glob
 import numpy as np
 import pandas as pd
 import altair as alt
 from PIL import Image, ImageOps
-
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 
-# ============================================================
-# PREPROCESS INPUT (WAJIB sesuai arsitektur training)
-# ============================================================
+# =========================
+# PREPROCESS INPUT (WAJIB sesuai backbone)
+# =========================
 from tensorflow.keras.applications.mobilenet_v3 import preprocess_input as mobilenet_prep
 from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_prep
 from tensorflow.keras.applications.densenet import preprocess_input as densenet_prep
 
-# ============================================================
-# (OPSIONAL) RAG / LangChain
-# ============================================================
+# =========================
+# LANGCHAIN (RAG)
+# =========================
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
 
-# ============================================================
-# 1) KONFIGURASI HALAMAN
-# ============================================================
+# =========================
+# 1) KONFIGURASI STREAMLIT
+# =========================
 st.set_page_config(
     page_title="Sistem Pakar Jagung (Research Mode)",
     layout="wide"
 )
 
-# Session state untuk menyimpan hasil inferensi & chat
+# Simpan state agar hasil inferensi & chat tidak hilang saat rerun
 if "diagnosis_result" not in st.session_state:
     st.session_state["diagnosis_result"] = None
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
-if "is_running" not in st.session_state:
-    st.session_state["is_running"] = False  # untuk disable tombol saat inferensi jalan
 
-# ============================================================
-# 2) LABEL KELAS (URUT SESUAI INDEX OUTPUT MODEL!)
-#    (Ini urutan yang kamu minta: 0..3)
-# ============================================================
+# =========================
+# 2) LABEL KELAS (URUTAN WAJIB)
+# =========================
 CLASS_NAMES = [
-    "Hawar Daun (Northern Leaf Blight)",   # index 0
-    "Karat Daun (Common Rust)",            # index 1
-    "Bercak Daun (Gray Leaf Spot)",        # index 2
-    "Tanaman Sehat"                        # index 3
+    "Hawar Daun (Northern Leaf Blight)",  # index 0
+    "Karat Daun (Common Rust)",           # index 1
+    "Bercak Daun (Gray Leaf Spot)",       # index 2
+    "Tanaman Sehat"                       # index 3
 ]
 
-# ============================================================
-# 3) KONFIG MODEL: semua .keras
-# ============================================================
+N_CLASS = len(CLASS_NAMES)  # 4 kelas
+
+# =========================
+# 3) MODEL FILES (.keras semua)
+# =========================
 MODEL_FILES = {
-    "MobileNetV3":  "model_jagung_mobilenetv3_vFinal.keras",
+    "MobileNetV3": "model_jagung_mobilenetv3_vFinal.keras",
     "EfficientNet": "model_jagung_efficientnet_vFinal.keras",
-    "DenseNet":     "model_jagung_densenet_vFinal.keras",
+    "DenseNet": "model_jagung_densenet_vFinal.keras",
 }
 
 PREPROCESS_MAP = {
-    "MobileNetV3":  mobilenet_prep,
+    "MobileNetV3": mobilenet_prep,
     "EfficientNet": efficientnet_prep,
-    "DenseNet":     densenet_prep,
+    "DenseNet": densenet_prep,
 }
 
-# ============================================================
-# 4) BOBOT ENSEMBLE OTOMATIS (dari grafik training kamu)
-#    Kenapa pakai inverse val_loss?
-#    - val_loss lebih sensitif untuk “confidence” dan generalisasi
-#    - makin kecil loss => makin besar bobot
-# ============================================================
-VAL_LOSS_LAST = {
-    "MobileNetV3":  0.163,
-    "EfficientNet": 0.148,
-    "DenseNet":     0.129,
+# =========================
+# 4) BOBOT AUTO (dari grafik F1 per kelas yang kamu kirim)
+#    - Hitung dari rata-rata F1 (macro over classes)
+# =========================
+AUTO_WEIGHTS = {
+    "MobileNetV3": 0.333,
+    "EfficientNet": 0.332,
+    "DenseNet": 0.335,
 }
+# Catatan: sudah dinormalisasi (jumlahnya ~ 1.0)
 
-def normalize_weights_from_val_loss(val_loss_dict: dict) -> dict:
-    inv = {k: 1.0 / max(v, 1e-8) for k, v in val_loss_dict.items()}  # 1e-8 agar aman dari pembagian nol
-    s = sum(inv.values())
-    return {k: inv[k] / s for k in inv}
-
-AUTO_WEIGHTS = normalize_weights_from_val_loss(VAL_LOSS_LAST)  # ~ {0.30, 0.33, 0.37}
-
-# ============================================================
-# 5) LOAD MODEL (cached supaya tidak load ulang setiap rerun)
-# ============================================================
+# =========================
+# 5) LOAD MODEL (cache)
+# =========================
 @st.cache_resource
 def load_all_models():
+    """
+    Load semua model dari folder yang sama dengan file Streamlit ini.
+    cache_resource => model tidak reload setiap rerun UI.
+    """
     models = {}
-    base_dir = os.path.dirname(os.path.abspath(__file__))  # folder tempat app.py berada
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
     loaded_count = 0
-    expected = list(MODEL_FILES.keys())
-
     for name, filename in MODEL_FILES.items():
         full_path = os.path.join(base_dir, filename)
 
         if not os.path.exists(full_path):
-            # Tidak pakai st.error di sini karena fungsi cache (lebih aman print)
+            # jangan crash: cukup catat missing
             print(f"❌ File tidak ditemukan: {full_path}")
             continue
 
         try:
-            # compile=False:
-            # - inferensi saja (lebih cepat)
-            # - menghindari mismatch optimizer/loss versi TF
+            # Normal case: .keras harusnya aman compile=False
             models[name] = load_model(full_path, compile=False)
             loaded_count += 1
         except Exception as e:
-            print(f"❌ Gagal load {name}: {e}")
+            # Recovery kecil untuk beberapa kasus custom op
+            print(f"⚠️ Gagal load {name} normal: {e}")
+            try:
+                models[name] = load_model(
+                    full_path,
+                    compile=False,
+                    custom_objects={"relu6": tf.nn.relu6}
+                )
+                loaded_count += 1
+                print(f"✅ Recovery berhasil untuk {name}")
+            except Exception as e2:
+                print(f"❌ Recovery gagal {name}: {e2}")
 
-    return models, loaded_count, expected
+    expected_models = list(MODEL_FILES.keys())
+    return models, loaded_count, expected_models
 
-# ============================================================
+# =========================
 # 6) ENSEMBLE INFERENCE (weighted average)
-# ============================================================
-def run_research_ensemble(models_dict: dict, weights_dict: dict, image_pil: Image.Image):
-    # Input size 224x224:
-    # - standar ImageNet
-    # - konsisten dengan training kamu
+# =========================
+def run_research_ensemble(models_dict, weights_dict, image_pil):
+    """
+    Weighted average:
+      final_probs = sum_i (w_i * p_i) / sum_i (w_i)
+    - p_i: probabilitas softmax model i (shape [4])
+    - w_i: bobot model i
+    """
+
+    # Samakan size input: 224x224 (umum untuk ImageNet backbones)
     size = (224, 224)
 
-    # ImageOps.fit + LANCZOS:
-    # - fit menjaga rasio & crop rapi
-    # - LANCZOS kualitas tinggi untuk resize
+    # Fit+crop biar rasio tetap bagus (daripada stretch)
     image_resized = ImageOps.fit(image_pil, size, Image.Resampling.LANCZOS).convert("RGB")
-    img_array_base = np.asarray(image_resized).astype(np.float32)
 
-    weighted_sum = np.zeros((len(CLASS_NAMES),), dtype=np.float32)
-    effective_total_weight = 0.0
+    # Ubah ke array float32 (TF friendly)
+    img_array_base = np.asarray(image_resized).astype(np.float32)
 
     model_names = []
     raw_probs_matrix = []
+    weighted_sum = np.zeros((N_CLASS,), dtype=np.float32)
+    effective_total_weight = 0.0
 
     for name, model in models_dict.items():
-        # copy agar preprocessing tiap model tidak saling mengganggu
+        # Copy array mentah, lalu preprocess sesuai backbone model tsb
         img_input = img_array_base.copy()
+        img_input = PREPROCESS_MAP[name](img_input)
 
-        # preprocess sesuai model
-        prep_func = PREPROCESS_MAP.get(name, None)
-        if prep_func is not None:
-            img_input = prep_func(img_input)
-
-        # bobot model (kalau model tidak ada bobot => 0)
-        w = float(weights_dict.get(name, 0.0))
-
-        # shape jadi (1, 224, 224, 3) untuk predict
+        # Tambah dimensi batch: (1, 224, 224, 3)
         img_input = np.expand_dims(img_input, axis=0)
 
-        # output pred_prob = (4,) probabilitas tiap kelas
+        # Prediksi => (1,4) lalu ambil [0]
         pred_prob = model.predict(img_input, verbose=0)[0]
+
+        # Bobot model (kalau 0, kontribusinya 0)
+        w = float(weights_dict.get(name, 0.0))
 
         model_names.append(name)
         raw_probs_matrix.append(pred_prob)
@@ -161,7 +164,7 @@ def run_research_ensemble(models_dict: dict, weights_dict: dict, image_pil: Imag
         weighted_sum += pred_prob * w
         effective_total_weight += w
 
-    # safety: kalau semua bobot 0, fallback jadi 1 agar tidak NaN
+    # Kalau user set semua bobot 0, jangan bagi 0
     if effective_total_weight <= 0:
         effective_total_weight = 1.0
 
@@ -174,135 +177,129 @@ def run_research_ensemble(models_dict: dict, weights_dict: dict, image_pil: Imag
         "final_probs": final_probs,
         "model_names": model_names,
         "raw_matrix": np.array(raw_probs_matrix),
-        "effective_total_weight": float(effective_total_weight),
+        "effective_total_weight": effective_total_weight
     }
 
-# ============================================================
-# 7) KNOWLEDGE BASE (RAG) - cached
-# ============================================================
+# =========================
+# 7) KNOWLEDGE BASE (RAG) - cache
+# =========================
 @st.cache_resource
 def load_knowledge_base():
+    """
+    Load semua PDF di folder knowledge_base/ lalu buat vectorstore Chroma.
+    cache_resource => tidak rebuild embedding setiap rerun.
+    """
     SOP_FOLDER = "knowledge_base"
-    os.makedirs(SOP_FOLDER, exist_ok=True)  # otomatis buat folder jika belum ada
+    os.makedirs(SOP_FOLDER, exist_ok=True)
 
     pdf_files = glob.glob(os.path.join(SOP_FOLDER, "*.pdf"))
     if not pdf_files:
         return None, 0
 
-    all_docs = []
+    all_documents = []
     for pdf_path in pdf_files:
         try:
             loader = PyPDFLoader(pdf_path)
-            all_docs.extend(loader.load())
+            docs = loader.load()
+            all_documents.extend(docs)
         except Exception as e:
             print(f"[WARN] gagal load PDF {pdf_path}: {e}")
 
-    if not all_docs:
-        return None, 0
+    if not all_documents:
+        return None, len(pdf_files)
 
-    # chunk_size=1000 & overlap=200:
-    # - 1000 karakter cukup buat konteks teknis SOP
-    # - overlap 200 menjaga konteks nyambung antar chunk
+    # chunk_size=1000 cukup “padat”, chunk_overlap=200 biar konteks nyambung
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = splitter.split_documents(all_docs)
+    splits = splitter.split_documents(all_documents)
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectorstore = Chroma.from_documents(splits, embeddings)
+
+    # persist_directory biar lebih stabil (opsional, tapi enak untuk app)
+    vectorstore = Chroma.from_documents(
+        splits,
+        embedding=embeddings,
+        persist_directory="chroma_db",
+        collection_name="kb_jagung"
+    )
 
     return vectorstore, len(pdf_files)
 
 vectorstore_db, jumlah_pdf = load_knowledge_base()
 
-# ============================================================
-# 8) SIDEBAR
-# ============================================================
+# =========================
+# 8) SIDEBAR UI
+# =========================
 with st.sidebar:
     st.title("🌽 Lab Riset Jagung")
     st.caption("Models: MobileNetV3, EfficientNet, DenseNet")
     st.markdown("---")
 
-    # Jangan hardcode API key di kode publik.
-    # Simpan di .streamlit/secrets.toml atau ENV.
-    # secrets.toml:
-    # GROQ_API_KEY="xxxxx"
-    groq_api_key = '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'
+    # Jangan hardcode API key di source code (lebih aman pakai st.secrets / env)
+    groq_api_key = st.text_input("Groq API Key", type="password", value=os.getenv("GROQ_API_KEY", ""))
 
     models_dict, count, expected_models = load_all_models()
-    missing_models = [m for m in expected_models if m not in models_dict]
 
+    missing_models = [m for m in expected_models if m not in models_dict]
     if missing_models:
-        st.error("⚠️ Beberapa model gagal dimuat:")
+        st.error("⚠️ Beberapa model gagal dimuat!")
         for m in missing_models:
-            st.write(f"❌ **{m}** (cek file `{MODEL_FILES[m]}`)")
-        st.caption("Pastikan semua file `.keras` ada satu folder dengan `app.py`.")
+            st.write(f"❌ **{m}** (cek file: {MODEL_FILES[m]})")
+        st.caption("Pastikan semua file `.keras` berada 1 folder dengan script Streamlit.")
     else:
         st.success(f"✅ Semua {count} model berhasil dimuat.")
 
-    st.markdown("### ⚖️ Bobot Ensemble (Otomatis dari training)")
-    st.write("Menggunakan inverse **validation loss** (lebih kecil loss → bobot lebih besar).")
+    st.markdown("---")
+    st.markdown("### ⚖️ Bobot Ensemble")
 
-    # Default bobot otomatis
-    default_eff = float(AUTO_WEIGHTS["EfficientNet"])
-    default_den = float(AUTO_WEIGHTS["DenseNet"])
-    default_mob = float(AUTO_WEIGHTS["MobileNetV3"])
+    use_auto = st.checkbox("Gunakan bobot otomatis (dari evaluasi F1)", value=True)
 
-    # Jika mau dikunci otomatis, kamu bisa hapus checkbox + slider override di bawah.
-    allow_override = st.checkbox("Override manual bobot", value=False)
-
-    if allow_override:
-        w_eff = st.slider("Bobot EfficientNet", 0.0, 1.0, default_eff, 0.01)
-        w_den = st.slider("Bobot DenseNet", 0.0, 1.0, default_den, 0.01)
-        w_mob = st.slider("Bobot MobileNetV3", 0.0, 1.0, default_mob, 0.01)
-        # Normalisasi supaya total bobot = 1 (lebih stabil untuk interpretasi)
-        s = (w_eff + w_den + w_mob) if (w_eff + w_den + w_mob) > 0 else 1.0
-        weights_dict = {
-            "EfficientNet": w_eff / s,
-            "DenseNet": w_den / s,
-            "MobileNetV3": w_mob / s,
-        }
+    if use_auto:
+        weights_dict = dict(AUTO_WEIGHTS)
+        st.info(
+            f"Auto Weights → MobileNetV3={weights_dict['MobileNetV3']:.3f}, "
+            f"EfficientNet={weights_dict['EfficientNet']:.3f}, "
+            f"DenseNet={weights_dict['DenseNet']:.3f}"
+        )
     else:
-        weights_dict = {
-            "EfficientNet": default_eff,
-            "DenseNet": default_den,
-            "MobileNetV3": default_mob,
-        }
+        # Manual mode
+        w_mob = st.number_input("Bobot MobileNetV3", 0.0, 1.0, 0.333, 0.01)
+        w_eff = st.number_input("Bobot EfficientNet", 0.0, 1.0, 0.332, 0.01)
+        w_dense = st.number_input("Bobot DenseNet", 0.0, 1.0, 0.335, 0.01)
 
-    st.caption(
-        f"Bobot aktif: "
-        f"Eff={weights_dict['EfficientNet']:.2f}, "
-        f"Den={weights_dict['DenseNet']:.2f}, "
-        f"Mob={weights_dict['MobileNetV3']:.2f}"
-    )
+        weights_dict = {"MobileNetV3": w_mob, "EfficientNet": w_eff, "DenseNet": w_dense}
+
+        # Optional: normalisasi supaya sum=1 (lebih “rapi”)
+        if st.checkbox("Normalisasi bobot (sum=1)", value=True):
+            s = sum(weights_dict.values())
+            if s > 0:
+                weights_dict = {k: v / s for k, v in weights_dict.items()}
 
     st.markdown("---")
     st.caption(f"📚 Knowledge base PDF terdeteksi: {jumlah_pdf}")
 
-# ============================================================
+# =========================
 # 9) MAIN TABS
-# ============================================================
+# =========================
 tab1, tab2 = st.tabs(["📊 Analisis Citra & Data", "💬 Diskusi Pakar"])
 
-# ============================================================
-# TAB 1: INFERENSI
-# ============================================================
+# ---------- TAB 1 ----------
 with tab1:
     st.header("Analisis Citra (Deep Learning Ensemble)")
 
-    # Pilih sumber gambar: upload atau kamera
-    source = st.radio("Sumber gambar", ["Upload File", "Kamera"], horizontal=True)
+    # Upload & Kamera
+    colA, colB = st.columns(2)
+
+    with colA:
+        uploaded_file = st.file_uploader("📁 Upload Sampel Daun", type=["jpg", "png", "jpeg"])
+
+    with colB:
+        cam_file = st.camera_input("📷 Ambil Foto dari Kamera")
 
     image = None
-
-    if source == "Upload File":
-        uploaded = st.file_uploader("Upload Sampel Daun", type=["jpg", "png", "jpeg"])
-        if uploaded:
-            image = Image.open(uploaded)
-
-    else:
-        # st.camera_input memungkinkan ambil foto dari kamera (browser/HP)
-        cam = st.camera_input("Ambil foto daun")
-        if cam:
-            image = Image.open(cam)
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+    elif cam_file is not None:
+        image = Image.open(io.BytesIO(cam_file.getvalue()))
 
     if image is not None:
         col_img, col_act = st.columns([1, 2])
@@ -311,52 +308,46 @@ with tab1:
 
         with col_act:
             st.info("Klik tombol untuk menjalankan inferensi ensemble.")
-            clicked = st.button(
-                "🔎 Jalankan Inferensi",
-                use_container_width=True,
-                disabled=st.session_state["is_running"]
-            )
 
-            if clicked:
+            if st.button("🔎 Jalankan Inferensi", use_container_width=True):
                 if len(models_dict) == 0:
                     st.error("❌ Tidak ada model yang bisa digunakan. Pastikan file `.keras` tersedia.")
                 else:
-                    st.session_state["is_running"] = True
-
-                    # Spinner = penanda loading yang kamu minta
-                    with st.spinner("Sedang menjalankan inferensi..."):
+                    # LOADING INDICATOR
+                    with st.spinner("⏳ Sedang menjalankan inferensi..."):
                         result = run_research_ensemble(models_dict, weights_dict, image)
+                        st.session_state["diagnosis_result"] = result
 
-                    st.session_state["diagnosis_result"] = result
-                    st.session_state["is_running"] = False
-
-    # ===========================
-    # TAMPILKAN HASIL
-    # ===========================
+    # Tampilkan hasil
     if st.session_state["diagnosis_result"] is not None:
         result = st.session_state["diagnosis_result"]
 
         st.subheader("✅ Hasil Diagnosis Ensemble")
         st.metric("Prediksi Akhir", result["final_label"], f"{result['final_conf']*100:.2f}%")
 
-        # DataFrame probabilitas: JANGAN di-sort agar urut sesuai index 0..3
+        # Probabilitas harus URUT sesuai CLASS_NAMES (jangan di-sort)
         probs_df = pd.DataFrame({
-            "Kelas": CLASS_NAMES,                 # urut tetap
-            "Probabilitas": result["final_probs"] # urut tetap
+            "Kelas": CLASS_NAMES,
+            "Probabilitas": result["final_probs"]
         })
 
-        st.write("**Probabilitas Ensemble (Weighted Average) — urut sesuai index kelas:**")
+        st.write("**Probabilitas Ensemble (Weighted Average) — urut sesuai kelas:**")
         st.dataframe(probs_df, use_container_width=True)
 
-        # Chart juga urut sesuai CLASS_NAMES (tanpa sort)
-        chart = alt.Chart(probs_df).mark_bar().encode(
-            x=alt.X("Kelas:N", sort=CLASS_NAMES),  # paksa urutan kategori sesuai list
-            y=alt.Y("Probabilitas:Q", scale=alt.Scale(domain=[0, 1])),
-            tooltip=["Kelas", alt.Tooltip("Probabilitas:Q", format=".4f")]
-        ).properties(height=280)
+        # Grafik Altair: kunci sort sesuai CLASS_NAMES
+        chart = (
+            alt.Chart(probs_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("Kelas:N", sort=CLASS_NAMES),
+                y=alt.Y("Probabilitas:Q", scale=alt.Scale(domain=[0, 1])),
+                tooltip=["Kelas", alt.Tooltip("Probabilitas:Q", format=".4f")]
+            )
+            .properties(height=280)
+        )
         st.altair_chart(chart, use_container_width=True)
 
-        # Detail per model
+        # Detail probabilitas per model
         if len(result["model_names"]) > 0:
             st.subheader("🔬 Detail Probabilitas per Model")
             raw_df = pd.DataFrame(
@@ -365,11 +356,9 @@ with tab1:
                 index=result["model_names"]
             )
             st.dataframe(raw_df, use_container_width=True)
-            st.caption(f"Total bobot efektif: **{result['effective_total_weight']:.2f}**")
+            st.caption(f"Total bobot efektif: **{result['effective_total_weight']:.3f}**")
 
-# ============================================================
-# TAB 2: CHATBOT (RAG)
-# ============================================================
+# ---------- TAB 2 ----------
 with tab2:
     st.header("💬 Diskusi Pakar (RAG dari SOP/PDF)")
 
@@ -378,7 +367,7 @@ with tab2:
     else:
         st.success("Knowledge base siap.")
 
-    # tampilkan history chat
+    # Render history chat
     for msg in st.session_state["messages"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -393,15 +382,23 @@ with tab2:
             answer = "Knowledge base belum tersedia."
         else:
             retriever = vectorstore_db.as_retriever(search_kwargs={"k": 4})
-            docs = retriever.get_relevant_documents(user_q)
-            context = "\n\n".join([d.page_content for d in docs])
+
+            # FIX: versi LangChain baru umumnya pakai invoke()
+            try:
+                docs = retriever.invoke(user_q)
+            except Exception:
+                # fallback (kalau ada versi lama)
+                docs = retriever.get_relevant_documents(user_q)
+
+            context = "\n\n".join([d.page_content for d in docs]) if docs else ""
 
             if not groq_api_key:
-                answer = "Groq API Key belum di-set (pakai secrets.toml atau ENV)."
+                answer = "Groq API Key belum di-set."
             else:
+                # Ganti model Groq yang masih aktif
                 llm = ChatGroq(
                     api_key=groq_api_key,
-                    model="llama-3.1-70b-versatile",
+                    model="llama-3.3-70b-versatile",  # alternatif ringan: "llama-3.1-8b-instant"
                     temperature=0.2
                 )
 

@@ -1,19 +1,19 @@
 # Core Streamlit & ML
 streamlit
-tensorflow==2.15.0  # Gunakan versi stabil lama (hindari 2.16+)
+tensorflow==2.15.0  # MEMAKSA KERAS 2.x
 numpy
 pandas
 Pillow
 altair
 
 # RAG & NLP Dependencies
-langchain-community==0.0.34 # Versi sebelum perubahan besar di LangChain
+langchain-community==0.0.34
 langchain-core==0.1.18
 langchain-text-splitters==0.0.1
-# sentence-transformers & transformers (Kunci Solusi)
 sentence-transformers==2.2.2 
 transformers==4.38.2 
-chromadb==0.4.24 # Versi yang sesuai dengan langchain-chroma lama
-
-# Lain-lain
+chromadb==0.4.24
 pypdf
+
+# Anda mungkin juga perlu memastikan Keras tidak diinstal terpisah:
+# keras  # HAPUS jika ada

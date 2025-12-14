@@ -1,19 +1,7 @@
-# Core Streamlit & ML
 streamlit
-tensorflow==2.15.0  # MEMAKSA KERAS 2.x
+tensorflow==2.15.0
+langchain-groq
 numpy
 pandas
 Pillow
 altair
-
-# RAG & NLP Dependencies
-langchain-community==0.0.34
-langchain-core==0.1.18
-langchain-text-splitters==0.0.1
-sentence-transformers==2.2.2 
-transformers==4.38.2 
-chromadb==0.4.24
-pypdf
-
-# Anda mungkin juga perlu memastikan Keras tidak diinstal terpisah:
-# keras  # HAPUS jika ada

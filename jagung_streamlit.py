@@ -17,13 +17,10 @@ from tensorflow.keras.applications.efficientnet import preprocess_input as effic
 from tensorflow.keras.applications.densenet import preprocess_input as densenet_prep
 
 # =========================
-# LANGCHAIN (RAG)
+# LANGCHAIN (HANYA GROQ)
 # =========================
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
+# Ketergantungan RAG lain dihapus untuk menghindari konflik
 
 # =========================
 # KONFIG STREAMLIT
@@ -33,13 +30,13 @@ st.set_page_config(page_title="Sistem Pakar Jagung (Research Mode)", layout="wid
 if "diagnosis_result" not in st.session_state:
     st.session_state["diagnosis_result"] = None
 if "messages" not in st.session_state:
-    st.session_state["messages"] = []
+    # Inisialisasi pesan sambutan
+    st.session_state["messages"] = [{"role": "assistant", "content": "Halo! Saya adalah Asisten Pakar Jagung Anda. Anda dapat mengunggah foto daun di tab sebelah, atau bertanya tentang penyakit dan penanganan di sini."}]
 
 # =========================
 # PATH AMAN (local + cloud)
 # =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SOP_FOLDER = os.path.join(BASE_DIR, "knowledge_base")
 
 # =========================
 # LABEL KELAS (URUTAN WAJIB)
@@ -148,62 +145,19 @@ def run_research_ensemble(models_dict, weights_dict, image_pil):
 
 
 # =========================
-# KNOWLEDGE BASE (RAG) - cache
+# KNOWLEDGE BASE (DIPERLUKAN UNTUK KOMPATIBILITAS STRUKTUR SIDEBAR)
 # =========================
-@st.cache_resource
+# Mengganti RAG kompleks dengan dummy function
 def load_knowledge_base():
-    os.makedirs(SOP_FOLDER, exist_ok=True)
+    # Karena RAG dinonaktifkan, kita hanya mengembalikan nilai dummy
+    return None, 0, []
 
-    pdf_files = sorted(glob.glob(os.path.join(SOP_FOLDER, "*.pdf")))
-    info = {
-        "detected": [os.path.basename(p) for p in pdf_files],
-        "loaded": [],
-        "failed": [],  # list of (filename, reason)
-        "pages_loaded": 0,
-    }
-
-    if not pdf_files:
-        return None, info
-
-    all_documents = []
-    for pdf_path in pdf_files:
-        fname = os.path.basename(pdf_path)
-        try:
-            loader = PyPDFLoader(pdf_path)
-            docs = loader.load()
-
-            # Filter halaman kosong (sering terjadi pada PDF scan gambar)
-            docs = [d for d in docs if (d.page_content or "").strip()]
-
-            if len(docs) == 0:
-                info["failed"].append((fname, "Teks kosong (kemungkinan PDF hasil scan/gambar)"))
-                continue
-
-            all_documents.extend(docs)
-            info["loaded"].append(fname)
-            info["pages_loaded"] += len(docs)
-
-        except Exception as e:
-            info["failed"].append((fname, str(e)))
-
-    if not all_documents:
-        # PDF ada, tapi semuanya gagal diekstrak teks
-        return None, info
-
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = splitter.split_documents(all_documents)
-
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-    # In-memory Chroma (aman untuk cloud yang kadang read-only)
-    vectorstore = Chroma.from_documents(
-        splits,
-        embedding=embeddings,
-        collection_name="kb_jagung"
-    )
-
-    return vectorstore, info
-
+# =========================
+# PANGGIL MODEL & KB
+# =========================
+models_dict, model_ok_count, expected_models = load_all_models()
+vectorstore_db, detected_count, daftar_pdf = load_knowledge_base() 
+# ^^^ PENTING: Panggil dummy KB, tangkap 3 nilai agar tidak NameError
 
 # =========================
 # SIDEBAR
@@ -215,49 +169,8 @@ with st.sidebar:
 
     # --- Groq API Key (JANGAN hardcode) ---
     groq_api_key = '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'
-
-    # --- Upload PDF ke knowledge_base ---
-    st.markdown("### 📚 Knowledge Base")
-    os.makedirs(SOP_FOLDER, exist_ok=True)
-    pdf_upload = st.file_uploader("Upload PDF SOP (opsional)", type=["pdf"], accept_multiple_files=True)
-
-    if pdf_upload:
-        for f in pdf_upload:
-            save_path = os.path.join(SOP_FOLDER, f.name)
-            with open(save_path, "wb") as out:
-                out.write(f.getbuffer())
-        st.success("✅ PDF tersimpan. Klik Rebuild KB.")
-
-    if st.button("🔄 Rebuild KB (Clear Cache)"):
-        st.cache_resource.clear()
-        st.rerun()
-
-    vectorstore_db, kb_info = load_knowledge_base()
-
-    detected_count = len(kb_info["detected"])
-    loaded_count_kb = len(kb_info["loaded"])
-    failed_count_kb = len(kb_info["failed"])
-
-    st.caption(f"📄 PDF terdeteksi: **{detected_count}**")
-    st.caption(f"✅ Berhasil diproses (berteks): **{loaded_count_kb}**")
-    st.caption(f"⚠️ Gagal diproses: **{failed_count_kb}**")
-
-    with st.expander("📄 Daftar PDF terdeteksi"):
-        if detected_count == 0:
-            st.write("Belum ada PDF di folder knowledge_base/.")
-        else:
-            for f in kb_info["detected"]:
-                st.write("• " + f)
-
-    if failed_count_kb > 0:
-        with st.expander("⚠️ Detail PDF yang gagal"):
-            for fname, reason in kb_info["failed"]:
-                st.write(f"❌ {fname} → {reason}")
-
-    st.markdown("---")
-
-    # --- Load models ---
-    models_dict, model_ok_count, expected_models = load_all_models()
+    
+    # --- Status Model ---
     missing_models = [m for m in expected_models if m not in models_dict]
 
     if missing_models:
@@ -296,9 +209,10 @@ with st.sidebar:
 # =========================
 tab1, tab2 = st.tabs(["📊 Analisis Citra & Data", "💬 Diskusi Pakar"])
 
-# ---------- TAB 1 ----------
+# ---------- TAB 1 (DEEP LEARNING ENSEMBLE) ----------
 with tab1:
     st.header("Analisis Citra (Deep Learning Ensemble)")
+    st.caption("Unggah foto untuk mendapatkan diagnosis penyakit jagung.")
 
     uploaded_file = st.file_uploader("📁 Upload Foto Daun (JPG/PNG)", type=["jpg", "png", "jpeg"])
 
@@ -353,23 +267,17 @@ with tab1:
             st.caption(f"Total bobot efektif: **{result['effective_total_weight']:.3f}**")
 
 
-# ---------- TAB 2 ----------
+# ---------- TAB 2 (KONSULTASI UMUM VIA GROQ) ----------
 with tab2:
-    st.header("💬 Diskusi Pakar (RAG dari SOP/PDF)")
+    st.header("💬 Diskusi Pakar (Konsultasi AI Umum)")
 
-    detected_count = len(kb_info["detected"])
-    loaded_count_kb = len(kb_info["loaded"])
-
-    if detected_count == 0:
-        st.warning("Belum ada PDF di folder `knowledge_base/` (atau upload dari sidebar).")
-    elif vectorstore_db is None or loaded_count_kb == 0:
-        st.error(
-            "PDF terdeteksi, tapi **gagal diproses menjadi knowledge base**.\n\n"
-            "Penyebab paling sering: PDF hasil scan (tanpa teks), PDF terenkripsi, atau loader gagal baca.\n"
-            "Cek sidebar bagian **Detail PDF yang gagal**."
-        )
+    # Status berdasarkan diagnosis gambar
+    if st.session_state["diagnosis_result"] is not None:
+        last_diag = st.session_state["diagnosis_result"]["final_label"]
+        st.info(f"💡 **Diagnosis Terakhir:** Sistem mendeteksi **{last_diag}**. Anda dapat menanyakan penanganan penyakit ini.")
+        
     else:
-        st.success("Knowledge base siap. Silakan bertanya.")
+        st.info("Silakan unggah foto di tab sebelah atau tanyakan pertanyaan umum tentang budidaya jagung.")
 
     # render chat history
     for msg in st.session_state["messages"]:
@@ -382,46 +290,39 @@ with tab2:
         with st.chat_message("user"):
             st.markdown(user_q)
 
-        if vectorstore_db is None:
-            answer = "Knowledge base belum siap. Cek PDF yang gagal diproses di sidebar."
+        # Cek apakah ada diagnosis terakhir untuk diberikan sebagai konteks
+        if st.session_state["diagnosis_result"] is not None:
+            last_diag = st.session_state["diagnosis_result"]["final_label"]
+            context_hint = f"Saat menjawab, ingatlah bahwa pengguna baru saja mendiagnosis penyakit: {last_diag}. Berikan saran penanganan yang relevan jika pertanyaannya berkaitan dengan penyakit ini."
         else:
-            retriever = vectorstore_db.as_retriever(search_kwargs={"k": 4})
+            context_hint = "Tidak ada diagnosis visual yang diberikan. Jawab sebagai pakar pertanian umum."
 
-            # kompatibel untuk versi langchain baru
-            try:
-                docs = retriever.invoke(user_q)
-            except Exception:
-                docs = retriever.get_relevant_documents(user_q)
 
-            context = "\n\n".join([d.page_content for d in docs]) if docs else ""
+        if not groq_api_key:
+            answer = "Groq API Key belum di-set. Isi di sidebar atau set ENV/Secrets."
+        else:
+            llm = ChatGroq(
+                api_key=groq_api_key,
+                model="llama-3.3-70b-versatile",
+                temperature=0.4 # Naikkan temperature sedikit untuk jawaban yang lebih bervariasi
+            )
 
-            if not groq_api_key:
-                answer = "Groq API Key belum di-set. Isi di sidebar atau set ENV/Secrets."
-            else:
-                llm = ChatGroq(
-                    api_key=groq_api_key,
-                    model="llama-3.3-70b-versatile",
-                    temperature=0.2
-                )
+            prompt = f"""
+Anda adalah asisten AI Pakar Penyakit Jagung. Jawablah pertanyaan pengguna dengan profesional, lugas, dan akurat, berdasarkan pengetahuan pertanian umum Anda.
 
-                prompt = f"""
-Kamu adalah asisten pakar penyakit daun jagung.
-Jawab dengan jelas, ringkas, dan berbasis konteks SOP/PDF berikut.
-Jika konteks tidak memuat jawabannya, katakan "tidak ditemukan di SOP".
+{context_hint}
 
-[KONTEKS]
-{context}
-
-[PERTANYAAN]
+[PERTANYAAN PENGGUNA]
 {user_q}
 
-[JAWABAN]
+[JAWABAN AHLI]
 """
-                try:
+            try:
+                with st.spinner("AI sedang memikirkan jawaban..."):
                     resp = llm.invoke(prompt)
                     answer = resp.content if hasattr(resp, "content") else str(resp)
-                except Exception as e:
-                    answer = f"Error: {e}"
+            except Exception as e:
+                answer = f"Error koneksi AI: {e}"
 
         st.session_state["messages"].append({"role": "assistant", "content": answer})
         with st.chat_message("assistant"):

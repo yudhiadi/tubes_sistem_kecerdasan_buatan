@@ -1,7 +1,9 @@
-streamlit>=1.36.0
+# PASTIKAN VERSI INI DIPAKAI!
+tensorflow==2.19.0 
+streamlit
 numpy
 pandas
-Pillow
 altair
-tensorflow==2.15.0
-groq>=0.9.0
+Pillow
+groq 
+# ... tambahkan pustaka lain jika ada

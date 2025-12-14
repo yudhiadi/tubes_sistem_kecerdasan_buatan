@@ -1,16 +1,16 @@
 streamlit
+tensorflow
 numpy
 pandas
-altair
+matplotlib
 Pillow
-langchain
+altair
+# LangChain & RAG
 langchain-community
+langchain-core
+langchain-text-splitters
 langchain-huggingface
 langchain-chroma
 langchain-groq
-pypdf
-sentence-transformers
-chromadb
-torch
-pysqlite3-binary
-tf-keras
+# Keras (Jika diperlukan oleh TensorFlow versi lama)
+keras

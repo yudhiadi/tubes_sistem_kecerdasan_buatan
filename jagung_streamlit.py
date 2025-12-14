@@ -170,6 +170,8 @@ def run_research_ensemble(models_dict, weights_dict, image_pil):
 def load_knowledge_base():
     """
     Load semua PDF di folder knowledge_base/ lalu buat vectorstore Chroma.
+    FIX: Argumen persist_directory dihapus agar database menjadi in-memory 
+         dan menghindari error 'readonly database' di cloud hosting.
     """
     SOP_FOLDER = "knowledge_base"
     os.makedirs(SOP_FOLDER, exist_ok=True)
@@ -198,16 +200,17 @@ def load_knowledge_base():
 
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
+    # --- PERUBAHAN UTAMA DISINI: Hapus persist_directory ---
     vectorstore = Chroma.from_documents(
         splits,
         embedding=embeddings,
-        persist_directory="chroma_db",
+        # persist_directory="chroma_db", <-- DIHAPUS
         collection_name="kb_jagung"
     )
+    # ----------------------------------------------------
 
     return vectorstore, len(pdf_files), pdf_filenames
 
-vectorstore_db, jumlah_pdf, daftar_pdf = load_knowledge_base()
 
 # =========================
 # 8) SIDEBAR UI

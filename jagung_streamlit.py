@@ -216,11 +216,6 @@ with st.sidebar:
     # --- Groq API Key (JANGAN hardcode) ---
     groq_api_key = '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'
 
-    with st.expander("🔐 Groq API Key", expanded=False):
-        st.caption("Disarankan pakai **st.secrets** atau ENV, bukan ditulis di source code.")
-        if not groq_api_key:
-            groq_api_key = 'st.text_input("Masukkan GROQ_API_KEY", type="password")'
-
     # --- Upload PDF ke knowledge_base ---
     st.markdown("### 📚 Knowledge Base")
     os.makedirs(SOP_FOLDER, exist_ok=True)

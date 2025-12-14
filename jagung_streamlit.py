@@ -315,7 +315,7 @@ with st.sidebar:
 # =========================
 # MAIN UI
 # =========================
-tab1, tab2 = st.tabs(["📊 Analisis Gambar (Ensemble)", "💬 Chat Ahli Jagung (LLM + KB)"])
+tab1, tab2 = st.tabs(["📊 Analisis Gambar (Ensemble)", "💬 Chat Ahli Jagung (LLM)"])
 
 
 # ---------- TAB 1 (Analisis Gambar) ----------

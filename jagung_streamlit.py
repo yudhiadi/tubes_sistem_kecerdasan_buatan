@@ -15,7 +15,7 @@ from tensorflow.keras.applications.efficientnet import preprocess_input as effic
 from tensorflow.keras.applications.densenet import preprocess_input as densenet_prep
 
 # LLM (Groq)
-from langchain_groq import ChatGroq
+from groq import Groq
 
 
 # =========================
@@ -378,55 +378,55 @@ with tab2:
 
         # retrieval KB sederhana
         hits = simple_retrieve(user_q, k=2)
-        kb_context = ""
         if hits:
             kb_context = "\n\n".join([f"- {h['title']}:\n{h['text']}" for h in hits])
         else:
-            kb_context = "\n".join([f"- {d['title']} (ringkas tersedia)" for d in KB_DOCS])
+            kb_context = "\n".join([f"- {d['title']}:\n{d['text']}" for d in KB_DOCS])
 
         diag_context = f"Diagnosis visual terakhir: {last_diag}." if last_diag else "Tidak ada diagnosis visual."
 
-        # Jika tidak ada API key, fallback jawaban berbasis KB (tanpa LLM)
-        if not groq_api_key:
-            answer = (
-                "Saya belum bisa akses LLM karena Groq API Key belum di-set.\n\n"
-                "Berikut referensi knowledge base yang relevan:\n"
-                f"{kb_context}\n\n"
-                "Jika kamu set GROQ_API_KEY di Secrets/ENV, saya bisa menjawab lebih natural seperti konsultasi ahli."
-            )
-        else:
-            llm = ChatGroq(
-                api_key=groq_api_key,
-                model="llama-3.3-70b-versatile",
-                temperature=0.3,
-            )
-
-            prompt = f"""
+        prompt = f"""
 Anda adalah ahli tanaman jagung (penyakit daun, budidaya, pencegahan, dan penanganan).
-Jawab dengan bahasa Indonesia yang lugas, terstruktur, dan aman.
+Jawab dalam bahasa Indonesia yang lugas, terstruktur, dan aman.
 
 Konteks:
 - {diag_context}
 
-Knowledge base (gunakan sebagai rujukan utama bila relevan):
+Knowledge base (rujukan utama bila relevan):
 {kb_context}
 
 Aturan jawaban:
 - Berikan langkah penanganan bertahap: identifikasi → tindakan budidaya → opsi kimia (bila perlu) → pencegahan.
-- Jika pertanyaan butuh klarifikasi (misal usia tanaman, kondisi cuaca, sebaran gejala), ajukan 2–3 pertanyaan singkat.
-- Jangan mengarang dosis pestisida spesifik; sarankan "ikuti label produk & rekomendasi penyuluh setempat".
+- Jika perlu klarifikasi, ajukan 2–3 pertanyaan singkat.
+- Jangan mengarang dosis pestisida spesifik; sarankan ikuti label produk & rekomendasi penyuluh setempat.
 
 Pertanyaan pengguna:
 {user_q}
 
 Jawaban ahli:
-"""
+""".strip()
+
+        if not groq_api_key:
+            answer = (
+                "Saya belum bisa akses LLM karena Groq API Key belum di-set.\n\n"
+                "Berikut referensi knowledge base yang relevan:\n"
+                f"{kb_context}"
+            )
+        else:
             try:
+                client = Groq(api_key=groq_api_key)
                 with st.spinner("Ahli AI sedang menyiapkan jawaban..."):
-                    resp = llm.invoke(prompt)
-                    answer = resp.content if hasattr(resp, "content") else str(resp)
+                    resp = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": "Anda adalah ahli tanaman jagung yang membantu diagnosis dan penanganan penyakit secara aman dan praktis."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.3,
+                    )
+                answer = resp.choices[0].message.content
             except Exception as e:
-                answer = f"Error koneksi LLM: {e}\n\n(Kamu masih bisa pakai knowledge base lokal:)\n{kb_context}"
+                answer = f"Error koneksi Groq: {e}\n\n(Kamu masih bisa pakai knowledge base lokal:)\n{kb_context}"
 
         st.session_state["chat"].append({"role": "assistant", "content": answer})
         with st.chat_message("assistant"):

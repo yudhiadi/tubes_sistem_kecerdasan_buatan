@@ -1,15 +1,7 @@
-# Core Streamlit UI
 streamlit>=1.36.0
-numpy>=1.23.0
-pandas>=1.5.0
-Pillow>=10.0.0
-altair>=5.0.0
-
-# Deep Learning
+numpy
+pandas
+Pillow
+altair
 tensorflow==2.15.0
-
-# LLM Chat (Groq via LangChain)
-langchain-groq
-langchain-core
-pydantic>=2.7,<3
-typing-extensions>=4.7
+groq>=0.9.0

@@ -194,19 +194,25 @@ def load_knowledge_base():
 
     pdf_files = glob.glob(os.path.join(SOP_FOLDER, "*.pdf"))
     if not pdf_files:
-        return None, 0
+        # return None, 0, []  <-- Tambahkan list kosong untuk nama file
+        return None, 0, [] 
 
     all_documents = []
+    pdf_filenames = [] # <--- Variabel baru untuk menampung nama file
+
     for pdf_path in pdf_files:
         try:
             loader = PyPDFLoader(pdf_path)
             docs = loader.load()
             all_documents.extend(docs)
+            
+            # Ambil nama file saja (tanpa path folder)
+            pdf_filenames.append(os.path.basename(pdf_path)) # <--- Simpan nama file
         except Exception as e:
             print(f"[WARN] gagal load PDF {pdf_path}: {e}")
 
     if not all_documents:
-        return None, len(pdf_files)
+        return None, len(pdf_files), pdf_filenames # <--- Kembalikan nama file
 
     # chunk_size=1000 cukup “padat”, chunk_overlap=200 biar konteks nyambung
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -222,9 +228,9 @@ def load_knowledge_base():
         collection_name="kb_jagung"
     )
 
-    return vectorstore, len(pdf_files)
+    return vectorstore, len(pdf_files), pdf_filenames # <--- Kembalikan nama file
 
-vectorstore_db, jumlah_pdf = load_knowledge_base()
+vectorstore_db, jumlah_pdf, daftar_pdf = load_knowledge_base()
 
 # =========================
 # 8) SIDEBAR UI
@@ -233,6 +239,16 @@ with st.sidebar:
     st.title("🌽 Lab Riset Jagung")
     st.caption("Models: MobileNetV3, EfficientNet, DenseNet")
     st.markdown("---")
+    st.caption(f"📚 Knowledge base PDF terdeteksi: {jumlah_pdf}")
+
+    # KODE BARU UNTUK MENAMPILKAN DAFTAR PDF
+    if jumlah_pdf > 0:
+        # Gunakan st.expander agar sidebar tidak terlalu panjang
+        with st.expander("Lihat Daftar Referensi PDF"):
+            st.markdown("*File yang dimuat:*")
+            # Konversi list nama file menjadi list Markdown
+            for file_name in daftar_pdf:
+                st.markdown(f"- **{file_name}**")
 
     # Jangan hardcode API key di source code (lebih aman pakai st.secrets / env)
     groq_api_key = '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'

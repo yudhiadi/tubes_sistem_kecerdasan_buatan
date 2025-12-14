@@ -236,16 +236,16 @@ with st.sidebar:
         st.success(f"✅ Semua {model_ok_count} model berhasil dimuat.")
 
     for m in expected_models:
-    if m in models_dict:
-        st.write(f"✅ {m} loaded")
-    else:
-        st.write(f"❌ {m} gagal")
-        with st.expander(f"Detail {m}"):
-            st.write(model_diag[m]["full_path"])
-            st.write(model_diag[m]["inspect"])
-            st.write("Error:", model_diag[m]["error"])
-            if model_diag[m]["traceback"]:
-                st.code(model_diag[m]["traceback"])
+        if m in models_dict:
+            st.write(f"✅ {m} loaded")
+        else:
+            st.write(f"❌ {m} gagal")
+            with st.expander(f"Detail {m}"):
+                st.write(model_diag[m]["full_path"])
+                st.write(model_diag[m]["inspect"])
+                st.write("Error:", model_diag[m]["error"])
+                if model_diag[m]["traceback"]:
+                    st.code(model_diag[m]["traceback"])
 
 
     st.markdown("---")

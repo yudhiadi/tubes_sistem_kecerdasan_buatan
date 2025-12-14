@@ -235,7 +235,8 @@ with st.sidebar:
     st.markdown("---")
 
     # Jangan hardcode API key di source code (lebih aman pakai st.secrets / env)
-    groq_api_key = st.text_input("Groq API Key", type="password", value=os.getenv("GROQ_API_KEY", ""))
+    groq_api_key = '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'
+
 
     models_dict, count, expected_models = load_all_models()
 

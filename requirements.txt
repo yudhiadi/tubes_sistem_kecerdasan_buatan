@@ -3,7 +3,6 @@ numpy
 pandas
 altair
 Pillow
-tensorflow-cpu
 langchain
 langchain-community
 langchain-huggingface

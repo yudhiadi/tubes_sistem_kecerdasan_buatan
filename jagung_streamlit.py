@@ -7,11 +7,10 @@ import altair as alt
 from PIL import Image, ImageOps
 
 # --- IMPOR KRUSIAL UNTUK TF 2.19.0 / KERAS 3 ---
-# Karena training menggunakan TF 2.19.0 (Keras 3), impor ini tetap benar
 import tensorflow as tf
 from tensorflow.keras.models import load_model 
 
-# Preprocess sesuai backbone (tetap gunakan path dari TF.Keras Applications)
+# Preprocess sesuai backbone
 from tensorflow.keras.applications.mobilenet_v3 import preprocess_input as mobilenet_prep
 from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_prep
 from tensorflow.keras.applications.densenet import preprocess_input as densenet_prep
@@ -64,7 +63,6 @@ AUTO_WEIGHTS = {
 # =========================
 # Helper: cek file & LFS pointer
 # =========================
-# (Fungsi ini tidak diubah karena sudah benar)
 def _is_lfs_pointer(head_bytes: bytes) -> bool:
     txt = head_bytes.decode("utf-8", errors="ignore")
     return "git-lfs.github.com/spec/v1" in txt
@@ -112,14 +110,11 @@ def load_all_models():
             continue
 
         try:
-            # PENTING: Untuk Keras 3/TF 2.19.0, pemuatan harus eksplisit
-            # Coba tanpa custom objects dulu
             models[name] = load_model(full_path, compile=False) 
             diagnostics[name]["load_ok"] = True
         except Exception as e:
-            # Recovery untuk kasus 'relu6' atau custom object lain
+            # Recovery
             try:
-                # Menambahkan custom_objects yang mungkin dibutuhkan
                 models[name] = load_model(
                     full_path, 
                     compile=False, 
@@ -136,7 +131,6 @@ def load_all_models():
 # =========================
 # ENSEMBLE INFERENCE
 # =========================
-# (Fungsi ini tidak diubah karena sudah benar)
 def preprocess_for_model(image_pil: Image.Image, model_name: str, size=(224, 224)) -> np.ndarray:
     img = ImageOps.fit(image_pil, size, Image.Resampling.LANCZOS).convert("RGB")
     arr = np.asarray(img).astype(np.float32) 
@@ -187,7 +181,6 @@ def run_ensemble(models_dict: dict, weights: dict, image_pil: Image.Image) -> di
 # =========================
 # KNOWLEDGE BASE
 # =========================
-# (Data ini tidak diubah karena sudah benar)
 KB_DOCS = [
     {
         "title": "Hawar Daun (Northern Leaf Blight)",
@@ -239,11 +232,13 @@ def simple_retrieve(query: str, k: int = 2):
     return [d for s, d in scored[:k] if s > 0]
 
 
-# =========================
-# SESSION STATE
-# =========================
+# ==================================
+# ✅ SESSION STATE (DIPINDAHKAN KE ATAS)
+# ==================================
+# Memastikan state terinisialisasi sebelum kode UI mencoba membacanya
 if "diagnosis" not in st.session_state:
-    st.session_state["diagnosis"] = None
+    # Nilai default yang lengkap untuk menghindari error .get("final_label")
+    st.session_state["diagnosis"] = {"final_label": "Belum Didiagnosis"} 
 
 if "chat" not in st.session_state:
     st.session_state["chat"] = [
@@ -282,7 +277,7 @@ with st.sidebar:
             with st.expander(f"Detail error: {m}", expanded=False):
                 st.write("Path:", d["path"])
                 st.write("Inspect:", d["inspect"])
-                st.error(d["error"]) # Tampilkan error di sini
+                st.error(d["error"]) 
                 if d["traceback"]:
                     st.code(d["traceback"])
 
@@ -310,7 +305,7 @@ with st.sidebar:
                 weights = {k: v / s for k, v in weights.items()}
 
     st.markdown("---")
-    # Bagian input key (diubah sedikit agar lebih bersih)
+    # Groq API Key
     groq_api_key = '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'
     if not groq_api_key:
         st.error("GROQ_API_KEY belum terkonfigurasi. Chat Ahli mungkin tidak berfungsi.")
@@ -323,7 +318,7 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["📊 Analisis Gambar (Ensemble)", "💬 Chat Ahli Jagung (LLM + KB)"])
 
 
-# ---------- TAB 1 ----------
+# ---------- TAB 1 (Analisis Gambar) ----------
 with tab1:
     st.header("📊 Analisis Gambar Daun Jagung (Ensemble 3 Model)")
     st.caption("Upload foto daun → sistem menghitung probabilitas tiap kelas dan hasil ensemble.")
@@ -342,17 +337,18 @@ with tab1:
             else:
                 st.write("Model aktif:", ", ".join(loaded_models))
                 
-                # Inisialisasi diagnosis jika belum ada
-                if st.session_state["diagnosis"] is None:
-                    st.session_state["diagnosis"] = {"final_label": "Belum Didiagnosis"}
+                # JANGAN inisialisasi st.session_state["diagnosis"] di sini lagi! 
+                # Sudah dilakukan di awal script.
                 
                 if st.button("🔎 Jalankan Prediksi", use_container_width=True):
                     with st.spinner("Memproses..."):
                         result = run_ensemble(models_dict, weights, image)
                         st.session_state["diagnosis"] = result
-                        st.experimental_rerun() # Rerun agar hasil langsung muncul
+                    # Gunakan st.rerun() di Streamlit modern
+                    st.rerun() 
 
-    if st.session_state["diagnosis"] and st.session_state["diagnosis"].get("final_label") != "Belum Didiagnosis":
+    # Tampilkan Hasil Ensemble jika ada diagnosis
+    if st.session_state["diagnosis"]["final_label"] != "Belum Didiagnosis":
         res = st.session_state["diagnosis"]
 
         st.subheader("✅ Hasil Ensemble")
@@ -381,12 +377,14 @@ with tab1:
             st.dataframe(raw_df.T, use_container_width=True)
 
 
-# ---------- TAB 2 ----------
+# ---------- TAB 2 (Chat Ahli) ----------
 with tab2:
     st.header("💬 Chat Ahli Tanaman Jagung")
 
-    last_diag = st.session_state.get("diagnosis", {}).get("final_label")
-    if last_diag and last_diag != "Belum Didiagnosis":
+    # AKSES STATE YANG LEBIH AMAN (Sudah dijamin ada karena inisialisasi di atas)
+    last_diag = st.session_state["diagnosis"]["final_label"] 
+    
+    if last_diag != "Belum Didiagnosis":
         st.info(f"Diagnosis terakhir dari gambar: **{last_diag}** (kamu bisa tanya penanganannya).")
     else:
         st.info("Belum ada diagnosis gambar. Kamu tetap bisa tanya tentang budidaya/penyakit jagung.")
@@ -407,10 +405,9 @@ with tab2:
         if hits:
             kb_context = "\n\n".join([f"- {h['title']}:\n{h['text']}" for h in hits])
         else:
-            # Jika tidak ada hit spesifik, berikan ringkasan KB
             kb_context = "\n".join([f"- {d['title']}:\n{d['text']}" for d in KB_DOCS])
 
-        diag_context = f"Diagnosis visual terakhir: {last_diag}." if last_diag and last_diag != "Belum Didiagnosis" else "Tidak ada diagnosis visual."
+        diag_context = f"Diagnosis visual terakhir: {last_diag}." if last_diag != "Belum Didiagnosis" else "Tidak ada diagnosis visual."
 
         prompt = f"""
 Anda adalah ahli tanaman jagung (penyakit daun, budidaya, pencegahan, dan penanganan).

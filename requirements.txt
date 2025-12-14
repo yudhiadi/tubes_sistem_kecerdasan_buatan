@@ -1,16 +1,11 @@
 streamlit
-tensorflow
 numpy
 pandas
-matplotlib
 Pillow
 altair
-# LangChain & RAG
-langchain-community
-langchain-core
-langchain-text-splitters
-langchain-huggingface
-langchain-chroma
+
+tensorflow==2.15.0
+
 langchain-groq
-# Keras (Jika diperlukan oleh TensorFlow versi lama)
-keras
+langchain-core==0.1.18
+pydantic==1.10.13

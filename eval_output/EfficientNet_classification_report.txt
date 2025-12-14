@@ -1,0 +1,15 @@
+Model: EfficientNet
+Model file: model_jagung_efficientnet_vFinal.keras
+Samples: 836
+Class indices: {'Blight': 0, 'Common_Rust': 1, 'Gray_Leaf_Spot': 2, 'Healthy': 3}
+
+                precision    recall  f1-score   support
+
+        Blight     0.9148    0.8908    0.9027       229
+   Common_Rust     0.9738    0.9962    0.9848       261
+Gray_Leaf_Spot     0.8333    0.8333    0.8333       114
+       Healthy     0.9957    0.9957    0.9957       232
+
+      accuracy                         0.9450       836
+     macro avg     0.9294    0.9290    0.9291       836
+  weighted avg     0.9446    0.9450    0.9447       836

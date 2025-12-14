@@ -1,0 +1,15 @@
+Model: MobileNetV3
+Model file: model_jagung_mobilenetv3_vFinal.keras
+Samples: 836
+Class indices: {'Blight': 0, 'Common_Rust': 1, 'Gray_Leaf_Spot': 2, 'Healthy': 3}
+
+                precision    recall  f1-score   support
+
+        Blight     0.9429    0.8646    0.9021       229
+   Common_Rust     0.9811    0.9923    0.9867       261
+Gray_Leaf_Spot     0.7863    0.9035    0.8408       114
+       Healthy     1.0000    0.9957    0.9978       232
+
+      accuracy                         0.9462       836
+     macro avg     0.9275    0.9390    0.9318       836
+  weighted avg     0.9493    0.9462    0.9467       836

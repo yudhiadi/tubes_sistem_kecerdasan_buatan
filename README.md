@@ -1,1 +1,0 @@
-# tubes_sistem_kecerdasan_buatan

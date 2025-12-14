@@ -1,18 +1,19 @@
+# Core Streamlit & ML
 streamlit
-tensorflow
+tensorflow==2.15.0  # Gunakan versi stabil lama (hindari 2.16+)
 numpy
 pandas
-matplotlib
 Pillow
 altair
-# LangChain & RAG
-langchain-community
-langchain-core
-langchain-text-splitters
-langchain-huggingface
-langchain-chroma
-langchain-groq
-# Keras (Jika diperlukan oleh TensorFlow versi lama)
-keras
+
+# RAG & NLP Dependencies
+langchain-community==0.0.34 # Versi sebelum perubahan besar di LangChain
+langchain-core==0.1.18
+langchain-text-splitters==0.0.1
+# sentence-transformers & transformers (Kunci Solusi)
+sentence-transformers==2.2.2 
+transformers==4.38.2 
+chromadb==0.4.24 # Versi yang sesuai dengan langchain-chroma lama
+
+# Lain-lain
 pypdf
-sentence-transformers

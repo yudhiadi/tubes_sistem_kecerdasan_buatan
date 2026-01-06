@@ -265,8 +265,8 @@ with st.sidebar:
     st.caption(f"TensorFlow: {tf.__version__}")
     
     # Peringatan Versi
-    if tf.__version__ != '2.19.0':
-        st.warning(f"PERHATIAN: Versi TF di sini ({tf.__version__}) TIDAK SAMA dengan versi training (2.19.0). Gagal load model mungkin terjadi!")
+    # if tf.__version__ != '2.19.0':
+    #     st.warning(f"PERHATIAN: Versi TF di sini ({tf.__version__}) TIDAK SAMA dengan versi training (2.19.0). Gagal load model mungkin terjadi!")
     
     for m in MODEL_FILES.keys():
         d = model_diag[m]
@@ -306,7 +306,7 @@ with st.sidebar:
 
     st.markdown("---")
     # Groq API Key
-    groq_api_key = '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'
+    groq_api_key = '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'
     if not groq_api_key:
         st.error("GROQ_API_KEY belum terkonfigurasi. Chat Ahli mungkin tidak berfungsi.")
         groq_api_key = st.text_input("Masukkan Groq API Key (opsional)", type="password")

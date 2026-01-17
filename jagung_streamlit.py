@@ -22,7 +22,7 @@ from groq import Groq
 # =========================
 # KONFIG STREAMLIT & PATH
 # =========================
-st.set_page_config(page_title="Lab Riset Jagung - Ensemble + Chat Ahli", layout="wide")
+st.set_page_config(page_title="Corn Research Lab - Ensemble + Expert Chat", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -30,10 +30,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # LABEL KELAS & METADATA
 # =========================
 CLASS_NAMES = [
-    "Hawar Daun (Northern Leaf Blight)", 
-    "Karat Daun (Common Rust)",
-    "Bercak Daun (Gray Leaf Spot)",
-    "Tanaman Sehat"
+    "Northern Leaf Blight",
+    "Common Rust",
+    "Gray Leaf Spot",
+    "Healthy Plant"
 ]
 N_CLASS = len(CLASS_NAMES)
 
@@ -103,10 +103,10 @@ def load_all_models():
         }
 
         if not finfo["exists"]:
-            diagnostics[name]["error"] = "File tidak ditemukan di server."
+            diagnostics[name]["error"] = "File not found on server."
             continue
         if finfo["is_lfs_pointer"]:
-            diagnostics[name]["error"] = "Terdeteksi Git LFS pointer (bukan file model asli)."
+            diagnostics[name]["error"] = "Detected Git LFS pointer (not the actual model file)."
             continue
 
         try:
@@ -183,40 +183,40 @@ def run_ensemble(models_dict: dict, weights: dict, image_pil: Image.Image) -> di
 # =========================
 KB_DOCS = [
     {
-        "title": "Hawar Daun (Northern Leaf Blight)",
+        "title": "Northern Leaf Blight",
         "text": (
-            "Gejala: bercak memanjang seperti cerutu/oval abu-abu kecoklatan, meluas pada daun tua.\n"
-            "Penyebab: jamur (umumnya Exserohilum turcicum).\n"
-            "Penanganan: gunakan varietas toleran, rotasi tanaman, buang sisa tanaman terinfeksi, "
-            "perbaiki sirkulasi udara, fungisida sesuai anjuran (jika serangan berat).\n"
-            "Pencegahan: jarak tanam tepat, sanitasi lahan, pemupukan seimbang (hindari N berlebih)."
+            "Symptoms: elongated cigar-shaped or oval grayish-brown lesions, spreading on older leaves.\n"
+            "Cause: fungus (commonly Exserohilum turcicum).\n"
+            "Management: use tolerant varieties, crop rotation, remove infected plant debris, "
+            "improve air circulation, fungicide as recommended (if severe infection).\n"
+            "Prevention: proper plant spacing, field sanitation, balanced fertilization (avoid excess nitrogen)."
         )
     },
     {
-        "title": "Karat Daun (Common Rust)",
+        "title": "Common Rust",
         "text": (
-            "Gejala: pustula/bintik menonjol berwarna coklat kemerahan seperti karat, bisa menyebar cepat.\n"
-            "Penyebab: jamur Puccinia sorghi.\n"
-            "Penanganan: varietas tahan, monitoring awal, fungisida bila ambang serangan tinggi.\n"
-            "Pencegahan: kurangi kelembapan berlebih, sanitasi, tanam serempak bila memungkinkan."
+            "Symptoms: raised reddish-brown pustules/spots resembling rust, can spread rapidly.\n"
+            "Cause: fungus Puccinia sorghi.\n"
+            "Management: resistant varieties, early monitoring, fungicide if infection threshold is high.\n"
+            "Prevention: reduce excess humidity, sanitation, synchronized planting if possible."
         )
     },
     {
-        "title": "Bercak Daun (Gray Leaf Spot)",
+        "title": "Gray Leaf Spot",
         "text": (
-            "Gejala: bercak persegi panjang abu-abu keperakan mengikuti tulang daun, sering muncul pada kondisi lembap.\n"
-            "Penyebab: jamur Cercospora zeae-maydis.\n"
-            "Penanganan: residu tanaman dikelola (dibajak/kompos), rotasi, varietas toleran, fungisida sesuai kebutuhan.\n"
-            "Pencegahan: sirkulasi udara baik, tidak terlalu rapat, hindari daun lama lembap terlalu lama."
+            "Symptoms: rectangular grayish-silver spots following leaf veins, often appear in humid conditions.\n"
+            "Cause: fungus Cercospora zeae-maydis.\n"
+            "Management: manage crop residues (plow/compost), rotation, tolerant varieties, fungicide as needed.\n"
+            "Prevention: good air circulation, avoid overcrowding, prevent old leaves from staying wet too long."
         )
     },
     {
-        "title": "Tanaman Sehat - Praktik Umum",
+        "title": "Healthy Plant - General Practices",
         "text": (
-            "Praktik baik: benih bermutu, pemupukan berimbang, pengairan cukup, kontrol gulma, "
-            "monitor hama-penyakit rutin, dan sanitasi lahan.\n"
-            "Jika ada gejala mirip penyakit: dokumentasikan (foto), cek sebaran, cek riwayat cuaca & kelembapan, "
-            "lakukan tindakan bertahap (budidaya dulu sebelum kimia)."
+            "Good practices: quality seeds, balanced fertilization, adequate irrigation, weed control, "
+            "routine pest-disease monitoring, and field sanitation.\n"
+            "If symptoms similar to disease appear: document (photo), check distribution, review weather & humidity history, "
+            "take stepwise actions (cultural first before chemical)."
         )
     },
 ]
@@ -242,7 +242,7 @@ if "diagnosis" not in st.session_state:
 
 if "chat" not in st.session_state:
     st.session_state["chat"] = [
-        {"role": "assistant", "content": "Halo! Upload foto daun jagung di tab Analisis, atau tanya saya tentang penyakit & penanganan jagung."}
+        {"role": "assistant", "content": "Hello! Upload a corn leaf photo in the Analysis tab, or ask me about corn diseases and management."}
     ]
 
 
@@ -294,9 +294,9 @@ with st.sidebar:
             f"DenseNet={weights['DenseNet']:.3f}"
         )
     else:
-        w_m = st.number_input("Bobot MobileNetV3", 0.0, 1.0, float(AUTO_WEIGHTS["MobileNetV3"]), 0.01)
-        w_e = st.number_input("Bobot EfficientNet", 0.0, 1.0, float(AUTO_WEIGHTS["EfficientNet"]), 0.01)
-        w_d = st.number_input("Bobot DenseNet", 0.0, 1.0, float(AUTO_WEIGHTS["DenseNet"]), 0.01)
+        w_m = st.number_input("MobileNetV3 Weight", 0.0, 1.0, float(AUTO_WEIGHTS["MobileNetV3"]), 0.01)
+        w_e = st.number_input("EfficientNet Weight", 0.0, 1.0, float(AUTO_WEIGHTS["EfficientNet"]), 0.01)
+        w_d = st.number_input("DenseNet Weight", 0.0, 1.0, float(AUTO_WEIGHTS["DenseNet"]), 0.01)
         weights = {"MobileNetV3": w_m, "EfficientNet": w_e, "DenseNet": w_d}
 
         if st.checkbox("Normalisasi (sum=1)", value=True):
@@ -308,14 +308,8 @@ with st.sidebar:
     # Groq API Key
     groq_api_key = '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'
     if not groq_api_key:
-        st.error("GROQ_API_KEY belum terkonfigurasi. Chat Ahli mungkin tidak berfungsi.")
-        groq_api_key = st.text_input("Masukkan Groq API Key (opsional)", type="password")
-
-
-# =========================
-# MAIN UI
-# =========================
-tab1, tab2 = st.tabs(["📊 Analisis Gambar (Ensemble)", "💬 Chat Ahli Jagung (LLM)"])
+        st.error("GROQ_API_KEY is not configured. Expert Chat may not work.")
+        groq_api_key = st.text_input("Enter Groq API Key (optional)", type="password")
 
 
 # ---------- TAB 1 (Analisis Gambar) ----------
@@ -323,134 +317,134 @@ with tab1:
     st.header("📊 Analisis Gambar Daun Jagung (Ensemble 3 Model)")
     st.caption("Upload foto daun → sistem menghitung probabilitas tiap kelas dan hasil ensemble.")
 
-    uploaded = st.file_uploader("Upload gambar (JPG/PNG)", type=["jpg", "jpeg", "png"])
+    uploaded = st.file_uploader("Upload image (JPG/PNG)", type=["jpg", "jpeg", "png"])
     image = Image.open(uploaded).convert("RGB") if uploaded else None
 
     if image:
         col1, col2 = st.columns([1, 1.2])
         with col1:
-            st.image(image, caption="Citra Input", use_container_width=True)
+            st.image(image, caption="Input Image", use_container_width=True)
 
         with col2:
             if len(loaded_models) == 0:
-                st.error("Tidak ada model yang berhasil dimuat. Cek sidebar error detail.")
+                st.error("No models loaded successfully. Check sidebar for error details.")
             else:
-                st.write("Model aktif:", ", ".join(loaded_models))
+                st.write("Active models:", ", ".join(loaded_models))
                 
-                # JANGAN inisialisasi st.session_state["diagnosis"] di sini lagi! 
-                # Sudah dilakukan di awal script.
+                # DO NOT reinitialize st.session_state["diagnosis"] here! 
+                # Already done at the top of the script.
                 
-                if st.button("🔎 Jalankan Prediksi", use_container_width=True):
-                    with st.spinner("Memproses..."):
+                if st.button("🔎 Run Prediction", use_container_width=True):
+                    with st.spinner("Processing..."):
                         result = run_ensemble(models_dict, weights, image)
                         st.session_state["diagnosis"] = result
-                    # Gunakan st.rerun() di Streamlit modern
-                    st.rerun() 
+                    # Use st.rerun() in modern Streamlit
+                    st.rerun()
 
-    # Tampilkan Hasil Ensemble jika ada diagnosis
+    # Show Ensemble Result if diagnosis exists
     if st.session_state["diagnosis"]["final_label"] != "Belum Didiagnosis":
         res = st.session_state["diagnosis"]
 
-        st.subheader("✅ Hasil Ensemble")
-        st.metric("Prediksi Akhir", res["final_label"], f"{res['final_conf']*100:.2f}%")
-        st.caption(f"Model terpakai: {', '.join(res['used_models'])} | Total bobot efektif: {res['total_weight']:.3f}")
+        st.subheader("✅ Ensemble Result")
+        st.metric("Final Prediction", res["final_label"], f"{res['final_conf']*100:.2f}%")
+        st.caption(f"Models used: {', '.join(res['used_models'])} | Total effective weight: {res['total_weight']:.3f}")
 
-        probs_df = pd.DataFrame({"Kelas": CLASS_NAMES, "Probabilitas": res["final_probs"]})
+        probs_df = pd.DataFrame({"Class": CLASS_NAMES, "Probability": res["final_probs"]})
         st.dataframe(probs_df, use_container_width=True)
 
         chart = (
             alt.Chart(probs_df)
             .mark_bar()
             .encode(
-                x=alt.X("Kelas:N", sort=CLASS_NAMES),
-                y=alt.Y("Probabilitas:Q", scale=alt.Scale(domain=[0, 1])),
-                tooltip=["Kelas", alt.Tooltip("Probabilitas:Q", format=".4f")]
+                x=alt.X("Class:N", sort=CLASS_NAMES),
+                y=alt.Y("Probability:Q", scale=alt.Scale(domain=[0, 1])),
+                tooltip=["Class", alt.Tooltip("Probability:Q", format=".4f")]
             )
             .properties(height=280)
         )
         st.altair_chart(chart, use_container_width=True)
 
-        # detail per model
+        # per-model details
         if res["per_model_probs"]:
-            st.subheader("🔬 Probabilitas per Model")
+            st.subheader("🔬 Probability per Model")
             raw_df = pd.DataFrame({m: res["per_model_probs"][m] for m in res["per_model_probs"]}, index=CLASS_NAMES)
             st.dataframe(raw_df.T, use_container_width=True)
 
 
-# ---------- TAB 2 (Chat Ahli) ----------
+# ---------- TAB 2 (Expert Chat) ----------
 with tab2:
-    st.header("💬 Chat Ahli Tanaman Jagung")
+    st.header("💬 Corn Expert Chat")
 
-    # AKSES STATE YANG LEBIH AMAN (Sudah dijamin ada karena inisialisasi di atas)
+    # Safe state access (already initialized above)
     last_diag = st.session_state["diagnosis"]["final_label"] 
     
     if last_diag != "Belum Didiagnosis":
-        st.info(f"Diagnosis terakhir dari gambar: **{last_diag}** (kamu bisa tanya penanganannya).")
+        st.info(f"Last image diagnosis: **{last_diag}** (you can ask about its management).")
     else:
-        st.info("Belum ada diagnosis gambar. Kamu tetap bisa tanya tentang budidaya/penyakit jagung.")
+        st.info("No image diagnosis yet. You can still ask about corn cultivation/diseases.")
 
-    # tampilkan chat history
+    # show chat history
     for msg in st.session_state["chat"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    user_q = st.chat_input("Tulis pertanyaan tentang jagung…")
+    user_q = st.chat_input("Type your question about corn…")
     if user_q:
         st.session_state["chat"].append({"role": "user", "content": user_q})
         with st.chat_message("user"):
             st.markdown(user_q)
 
-        # retrieval KB sederhana
+        # simple KB retrieval
         hits = simple_retrieve(user_q, k=2)
         if hits:
             kb_context = "\n\n".join([f"- {h['title']}:\n{h['text']}" for h in hits])
         else:
             kb_context = "\n".join([f"- {d['title']}:\n{d['text']}" for d in KB_DOCS])
 
-        diag_context = f"Diagnosis visual terakhir: {last_diag}." if last_diag != "Belum Didiagnosis" else "Tidak ada diagnosis visual."
+        diag_context = f"Last visual diagnosis: {last_diag}." if last_diag != "Belum Didiagnosis" else "No visual diagnosis."
 
         prompt = f"""
-Anda adalah ahli tanaman jagung (penyakit daun, budidaya, pencegahan, dan penanganan).
-Jawab dalam bahasa Indonesia yang lugas, terstruktur, dan aman.
+You are a corn plant expert (leaf diseases, cultivation, prevention, and management).
+Answer in clear, structured, and safe English.
 
-Konteks:
+Context:
 - {diag_context}
 
-Knowledge base (rujukan utama bila relevan):
+Knowledge base (main reference if relevant):
 {kb_context}
 
-Aturan jawaban:
-- Berikan langkah penanganan bertahap: identifikasi → tindakan budidaya → opsi kimia (bila perlu) → pencegahan.
-- Jika perlu klarifikasi, ajukan 2–3 pertanyaan singkat.
-- Jangan mengarang dosis pestisida spesifik; sarankan ikuti label produk & rekomendasi penyuluh setempat.
+Answer rules:
+- Provide stepwise management: identification → cultivation actions → chemical options (if needed) → prevention.
+- If clarification is needed, ask 2–3 short questions.
+- Do not invent specific pesticide dosages; advise to follow product label & local extension recommendations.
 
-Pertanyaan pengguna:
+User question:
 {user_q}
 
-Jawaban ahli:
+Expert answer:
 """.strip()
 
         if not groq_api_key:
             answer = (
-                "Saya belum bisa akses LLM karena Groq API Key belum di-set.\n\n"
-                "Berikut referensi knowledge base yang relevan:\n"
+                "Cannot access LLM because Groq API Key is not set.\n\n"
+                "Here are relevant knowledge base references:\n"
                 f"{kb_context}"
             )
         else:
             try:
                 client = Groq(api_key=groq_api_key)
-                with st.spinner("Ahli AI sedang menyiapkan jawaban..."):
+                with st.spinner("AI Expert is preparing the answer..."):
                     resp = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
-                            {"role": "system", "content": "Anda adalah ahli tanaman jagung yang membantu diagnosis dan penanganan penyakit secara aman dan praktis."},
+                            {"role": "system", "content": "You are a corn plant expert who helps diagnose and manage diseases safely and practically."},
                             {"role": "user", "content": prompt},
                         ],
                         temperature=0.3,
                     )
                 answer = resp.choices[0].message.content
             except Exception as e:
-                answer = f"Error koneksi Groq: {e}\n\n(Kamu masih bisa pakai knowledge base lokal:)\n{kb_context}"
+                answer = f"Groq connection error: {e}\n\n(You can still use the local knowledge base:)\n{kb_context}"
 
         st.session_state["chat"].append({"role": "assistant", "content": answer})
         with st.chat_message("assistant"):

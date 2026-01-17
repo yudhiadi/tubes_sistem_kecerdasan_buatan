@@ -252,16 +252,15 @@ if "chat" not in st.session_state:
 models_dict, model_diag = load_all_models()
 loaded_models = list(models_dict.keys())
 
-
 # =========================
 # SIDEBAR
 # =========================
 with st.sidebar:
-    st.title("🌽 Lab Riset Jagung")
-    st.caption("Ensemble 3 model + Chat Ahli Jagung")
+    st.title("🌽 Corn Research Lab")
+    st.caption("3-model Ensemble + Corn Expert Chat")
     st.markdown("---")
 
-    st.markdown("### 🧠 Status Model")
+    st.markdown("### 🧠 Model Status")
     st.caption(f"TensorFlow: {tf.__version__}")
     
     # Peringatan Versi
@@ -282,8 +281,8 @@ with st.sidebar:
                     st.code(d["traceback"])
 
     st.markdown("---")
-    st.markdown("### ⚖️ Bobot Ensemble")
-    use_auto = st.checkbox("Gunakan bobot default", value=True)
+    st.markdown("### ⚖️ Ensemble Weights")
+    use_auto = st.checkbox("Use default weights", value=True)
 
     # Bobot (tidak diubah)
     if use_auto:
@@ -306,16 +305,22 @@ with st.sidebar:
 
     st.markdown("---")
     # Groq API Key
-    groq_api_key = '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'
+    groq_api_key = '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'
     if not groq_api_key:
-        st.error("GROQ_API_KEY is not configured. Expert Chat may not work.")
-        groq_api_key = st.text_input("Enter Groq API Key (optional)", type="password")
+        st.error("GROQ_API_KEY belum terkonfigurasi. Chat Ahli mungkin tidak berfungsi.")
+        groq_api_key = st.text_input("Masukkan Groq API Key (opsional)", type="password")
 
 
-# ---------- TAB 1 (Analisis Gambar) ----------
+# =========================
+# MAIN UI
+# =========================
+tab1, tab2 = st.tabs(["📊 Image Analysis (Ensemble)", "💬 Corn Expert Chat (LLM)"])
+
+
+# ---------- TAB 1 (Image Analysis) ----------
 with tab1:
-    st.header("📊 Analisis Gambar Daun Jagung (Ensemble 3 Model)")
-    st.caption("Upload foto daun → sistem menghitung probabilitas tiap kelas dan hasil ensemble.")
+    st.header("📊 Corn Leaf Image Analysis (3-Model Ensemble)")
+    st.caption("Upload a corn leaf photo → the system will compute class probabilities and ensemble results.")
 
     uploaded = st.file_uploader("Upload image (JPG/PNG)", type=["jpg", "jpeg", "png"])
     image = Image.open(uploaded).convert("RGB") if uploaded else None
@@ -331,7 +336,7 @@ with tab1:
             else:
                 st.write("Active models:", ", ".join(loaded_models))
                 
-                # DO NOT reinitialize st.session_state["diagnosis"] here! 
+                # DO NOT re-initialize st.session_state["diagnosis"] here! 
                 # Already done at the top of the script.
                 
                 if st.button("🔎 Run Prediction", use_container_width=True):
@@ -339,7 +344,7 @@ with tab1:
                         result = run_ensemble(models_dict, weights, image)
                         st.session_state["diagnosis"] = result
                     # Use st.rerun() in modern Streamlit
-                    st.rerun()
+                    st.rerun() 
 
     # Show Ensemble Result if diagnosis exists
     if st.session_state["diagnosis"]["final_label"] != "Belum Didiagnosis":
@@ -373,11 +378,11 @@ with tab1:
 
 # ---------- TAB 2 (Expert Chat) ----------
 with tab2:
-    st.header("💬 Corn Expert Chat")
+    st.header("💬 Corn Plant Expert Chat")
 
-    # Safe state access (already initialized above)
+    # SAFE STATE ACCESS (guaranteed initialized above)
     last_diag = st.session_state["diagnosis"]["final_label"] 
-    
+
     if last_diag != "Belum Didiagnosis":
         st.info(f"Last image diagnosis: **{last_diag}** (you can ask about its management).")
     else:
@@ -414,9 +419,9 @@ Knowledge base (main reference if relevant):
 {kb_context}
 
 Answer rules:
-- Provide stepwise management: identification → cultivation actions → chemical options (if needed) → prevention.
+- Provide stepwise management: identification → cultural actions → chemical options (if needed) → prevention.
 - If clarification is needed, ask 2–3 short questions.
-- Do not invent specific pesticide dosages; advise to follow product label & local extension recommendations.
+- Do not invent specific pesticide dosages; advise to follow product labels & local extension recommendations.
 
 User question:
 {user_q}
@@ -426,7 +431,7 @@ Expert answer:
 
         if not groq_api_key:
             answer = (
-                "Cannot access LLM because Groq API Key is not set.\n\n"
+                "I cannot access the LLM because the Groq API Key is not set.\n\n"
                 "Here are relevant knowledge base references:\n"
                 f"{kb_context}"
             )
@@ -437,7 +442,7 @@ Expert answer:
                     resp = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
-                            {"role": "system", "content": "You are a corn plant expert who helps diagnose and manage diseases safely and practically."},
+                            {"role": "system", "content": "You are a corn plant expert helping with safe and practical disease diagnosis and management."},
                             {"role": "user", "content": prompt},
                         ],
                         temperature=0.3,
@@ -449,3 +454,14 @@ Expert answer:
         st.session_state["chat"].append({"role": "assistant", "content": answer})
         with st.chat_message("assistant"):
             st.markdown(answer)
+
+st.markdown("""
+    <style>
+    html, body, [class*="css"]  {
+        font-size: 30px !important;
+    }
+    .stMarkdown, .stDataFrame, .stTable, .stMetric, .stCaption, .stChatMessageContent {
+        font-size: 30px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
